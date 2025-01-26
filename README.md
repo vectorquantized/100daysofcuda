@@ -13,3 +13,12 @@ Want to be a stellar cuda programmer.
 
 ### Day 1
 Starting Day 1 with a simple kernel. Should perform VectorAdd.
+Instructions to run:
+```
+mkdir build
+cd build
+cmake ..
+make day_1
+./day_1
+```
+
