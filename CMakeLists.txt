@@ -34,13 +34,13 @@ foreach(DAY_DIR ${DAY_DIRS})
     # Add include directories
     target_include_directories(${DAY_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-    # Link fmt and cxxopts
-    target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt cxxopts)
+    # Link fmt and 
+    target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt)
 
 endforeach()
 
 # Custom clean target for full rebuild
-add_custom_target(clean_build ALL
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}
+add_custom_target(clean_build
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/*
     COMMENT "Performing a full clean of the build directory"
 )
