@@ -8,7 +8,6 @@
 void init_random_vector(std::vector<float>& array, size_t size, unsigned int seed) {
     std::mt19937 generator(seed);
     std::uniform_real_distribution<float> distribution (0.0f, 1.0f);
-    array.resize(size);
     for(size_t i = 0; i< size; ++i) {
         array[i] = distribution(generator);
     }
