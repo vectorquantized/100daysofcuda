@@ -12,4 +12,17 @@ void vector_add(const std::vector<float>& a, const std::vector<float>& b, std::v
         c[i] = a[i] + b[i];
     }
 }
+
+void gemm(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& c, int M, int K, int N) {
+    c.resize(M * N);
+    for (int row = 0; row < M; ++row) {
+        for (int col = 0; col < N; ++col) {
+            float p_value = 0.0f;
+            for (int i = 0; i < K; ++i) {
+                p_value += a[row * K + i] * b[i * N + col];
+            }
+            c[row * N + col] = p_value;
+        }
+    }
+}
 }

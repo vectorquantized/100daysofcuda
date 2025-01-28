@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
     if (validated) {
         std::cout << "Test Passed!" << std::endl;
     } else {
-	std::cout << "CPU and GPU kernel results don't match" << std::endl;
+	    std::cout << "CPU and GPU kernel results don't match" << std::endl;
     }
     return 0;
 }
