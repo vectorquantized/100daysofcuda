@@ -57,13 +57,6 @@ int main(int argc, char* argv[]) {
     c_d.free();
     std::vector<float> c_ref(M * N);
     cpu_kernels::gemm(a_h, b_h, c_ref, M, K, N);
-    // cpu_utils::print_formatted_vector(c_h);
-    // cpu_utils::print_formatted_vector(c_ref);
-    bool validated = cpu_utils::compare_vectors(c_ref.data(), c_h.data(), M * N, 1e-2);
-    if (validated) {
-        std::cout << "Test Passed!" << std::endl;
-    } else {
-        std::cout << "CPU and GPU kernel results don't match" << std::endl;
-    }
+    COMPARE_RESULT(c_ref.data(), c_h.data(), M*N, 1e-3);
     return 0;
 }

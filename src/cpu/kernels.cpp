@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "cpu/kernels.h"
+#include "csrc/timing_utils.h"
 
 namespace cpu_kernels {
 void vector_add(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& c) {
@@ -14,6 +15,7 @@ void vector_add(const std::vector<float>& a, const std::vector<float>& b, std::v
 }
 
 void gemm(const std::vector<float>& a, const std::vector<float>& b, std::vector<float>& c, int M, int K, int N) {
+    TIMED_CPU_FUNCTION();
     c.resize(M * N);
     for (int row = 0; row < M; ++row) {
         for (int col = 0; col < N; ++col) {

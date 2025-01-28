@@ -3,7 +3,7 @@
 #define CUDA_UTILS_H
 
 #include <cuda_runtime.h>
-#include <iostream>
+#include <iostream>                                            
 
 #define CUDA_ERROR_CHECK(call)  { \
     cudaError_t error = call; \

@@ -55,11 +55,6 @@ int main(int argc, char* argv[]) {
 
     std::vector<float> c_ref(size);
     cpu_kernels::vector_add(a_h, b_h, c_ref);
-    bool validated = cpu_utils::compare_vectors(c_ref.data(), c_h.data(), size, 1e-4);
-    if (validated) {
-        std::cout << "Test Passed!" << std::endl;
-    } else {
-	    std::cout << "CPU and GPU kernel results don't match" << std::endl;
-    }
+    COMPARE_RESULT(c_ref.data(), c_h.data(), size, 1e-4);
     return 0;
 }

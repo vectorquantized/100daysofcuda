@@ -28,6 +28,17 @@ inline bool compare_vectors(const float* vec1, const float* vec2, int size, floa
     }
     return true;
 }
-}
+} //namespace cpu_utils
+
+// Macro definition
+#define COMPARE_RESULT(reference, output, size, epsilon)                      \
+    do {                                                                      \
+        bool validated = cpu_utils::compare_vectors(reference, output, size, epsilon); \
+        if (validated) {                                                     \
+            std::cout << "Test Passed!" << std::endl;                        \
+        } else {                                                             \
+            std::cout << "CPU and GPU kernel results don't match" << std::endl; \
+        }                                                                    \
+    } while (0)
 
 #endif //CPU_UTILS_H
