@@ -37,6 +37,14 @@ foreach(DAY_DIR ${DAY_DIRS})
     # Link fmt and 
     target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt)
 
+    # Add --ptxas-options=-v to see register usage
+    target_compile_options(${DAY_NAME} PRIVATE 
+    $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+    $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+    $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>
+    $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+)
+
 endforeach()
 
 # Custom clean target for full rebuild

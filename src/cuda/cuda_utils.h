@@ -14,6 +14,7 @@
     }}
 
 #define TIMED_CUDA_FUNCTION() CudaEventTimer(__FUNCTION__)
+#define TIMED_CUDA_BLOCK(BLOCK_NAME) CudaEventTimer(BLOCK_NAME)
 
 class CudaEventTimer {
 
