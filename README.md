@@ -11,7 +11,7 @@ Checkout: https://github.com/hkproj/100-days-of-cuda
 ### Why do this?
 Want to be a stellar cuda programmer.
 
-### Day 1
+### Day 1 VECTOR ADD
 Starting Day 1 with a simple kernel. Should perform VectorAdd.
 Instructions to run:
 ```
@@ -22,7 +22,7 @@ make day_1
 ./day_1
 ```
 
-### Day 2
+### Day 2 GEMM
 Day 2 commences with matrix multiplication, baseic version.
 We are essentially taking:
 ```
@@ -46,13 +46,13 @@ cmake ..
 make day_2
 ./day_2
 ```
-### Day 3
+### Day 3 TILED GEMM
 
 ![FlashAttention Banner](https://raw.githubusercontent.com/Dao-AILab/flash-attention/main/assets/flashattn_banner.jpg)
 
 <p align="center">Source: <a href="https://github.com/Dao-AILab/flash-attention">Dao-AILab / FlashAttention</a></p>
 
-As seen from the figure SRAM throughput is > 10x HBM. Let's see if we can put this to good use or not.
+As seen from the figure SRAM throughput is > 10x HBM. Let's see if we can put this to good use or not. We'll not code Flash Attention as of yet, the figure explains very clearly the difference in throughput of SRAM vs HBM and that's why I used it.
 
 On day 3 we give Tiled GEMM a refresher. In a nutshell we want to perform multiple floating point ops on a particular chunk of data that we transferred in shared memory from HBM and maximize data re-use.
 
