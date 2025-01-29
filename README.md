@@ -46,3 +46,26 @@ cmake ..
 make day_2
 ./day_2
 ```
+### Day 3
+
+![FlashAttention Banner](https://raw.githubusercontent.com/Dao-AILab/flash-attention/main/assets/flashattn_banner.jpg)
+
+<p align="center">Source: <a href="https://github.com/Dao-AILab/flash-attention">Dao-AILab / FlashAttention</a></p>
+
+As seen from the figure SRAM throughput is > 10x HBM. Let's see if we can put this to good use or not.
+
+On day 3 we give Tiled GEMM a refresher. In a nutshell we want to perform multiple floating point ops on a particular chunk of data that we transferred in shared memory from HBM and maximize data re-use.
+
+1. Load a tile of matrix A and B from global memory into shared memory
+2.	Perform multiple floating-point operations (FLOPs) using this shared memory data, maximizing reuse.
+3.	Load the next tile and repeat until the full matrix multiplication is done.
+
+This minimizes global memory accesses and maximizes arithmetic intensity (FLOPs per byte transferred).
+Note: If a TILE_WIDTH × TILE_WIDTH tile is loaded, it gets used TILE_WIDTH times before we move to the next tile.
+```
+mkdir build
+cd build
+cmake ..
+make day_3
+./day_3
+```
