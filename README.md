@@ -69,3 +69,11 @@ cmake ..
 make day_3
 ./day_3
 ```
+
+## Day 4 Softmax Kernel
+Softmax basic kernel
+The basic kernel works and is correct. We don't need to profile it to come to a conclusion that it is slow, reading the kernel should lay out the memory access patterns.
+* Needs to be tiled. It is memory bound at this point, we're reading too much from HBM
+* The cpu kernel could use OpenMP, couldn't add it to the build system, will figure it out.
+* GPU kernel makes an assumption that rows >> cols, which may not be the case, actually, it isn't as Batch size is always << hidden dims.
+* Need to extend it to 3D Tensors of Shape: (B, L, D)
