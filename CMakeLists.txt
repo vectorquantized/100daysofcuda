@@ -5,8 +5,11 @@ project(cudakernels CUDA CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# using fmt for printing
+
+
+# Using fmt for printing
 find_package(fmt REQUIRED)
+
 # Include directories for headers
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
@@ -16,6 +19,9 @@ file(GLOB CPU_SOURCES ${PROJECT_SOURCE_DIR}/src/cpu/*.cpp)
 
 # Collect all day_* directories dynamically
 file(GLOB DAY_DIRS ${PROJECT_SOURCE_DIR}/src/day_*)
+
+# Set common CUDA compilation flags
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --ptxas-options=-v -lineinfo -O3")
 
 # Iterate over day_* directories to create individual targets
 foreach(DAY_DIR ${DAY_DIRS})
@@ -34,16 +40,24 @@ foreach(DAY_DIR ${DAY_DIRS})
     # Add include directories
     target_include_directories(${DAY_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
-    # Link fmt and 
+    # Link fmt and OpenMP
     target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt)
 
-    # Add --ptxas-options=-v to see register usage
+
+    # Set compilation flags for CUDA and C++
     target_compile_options(${DAY_NAME} PRIVATE 
-    $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
-    $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
-    $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>
-    $<$<COMPILE_LANGUAGE:CUDA>:-O3>
-)
+        # CUDA-Specific Flags
+        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+        $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+        $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+
+    )
+    
+    # Define DEBUG macro when lineinfo is enabled
+    target_compile_definitions(${DAY_NAME} PRIVATE 
+        $<$<COMPILE_LANGUAGE:CUDA>:DEBUG>
+    )
 
 endforeach()
 

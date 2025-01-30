@@ -1,5 +1,9 @@
 #include <iostream>
 #include <stdexcept>
+#include <cmath>
+#include <vector>
+#include <numeric>
+#include <algorithm>
 #include "cpu/kernels.h"
 #include "csrc/timing_utils.h"
 
@@ -27,4 +31,5 @@ void gemm(const std::vector<float>& a, const std::vector<float>& b, std::vector<
         }
     }
 }
+
 }
