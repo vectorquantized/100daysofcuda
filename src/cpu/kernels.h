@@ -41,6 +41,35 @@ std::vector<T> softmax(const std::vector<T>& input) {
     return result;
 }
 
+template<typename T>
+std::vector<T> softmax(const std::vector<T>& input, size_t M, size_t N, float epsilon) {
+    std::vector<T> output(input.size());
+    
+    // Process each row separately
+    for(size_t i = 0; i < M; i++) {
+        // Find max in this row
+        T max_val = -std::numeric_limits<T>::max();
+        for(size_t j = 0; j < N; j++) {
+            max_val = std::max(max_val, input[i * N + j]);
+        }
+        
+        // Compute exp(x - max) and sum
+        T sum_exp = 0;
+        for(size_t j = 0; j < N; j++) {
+            T exp_val = exp_func(input[i * N + j] - max_val);
+            output[i * N + j] = exp_val;
+            sum_exp += exp_val;
+        }
+        
+        // Normalize
+        for(size_t j = 0; j < N; j++) {
+            output[i * N + j] /= (sum_exp + epsilon);
+        }
+    }
+    
+    return output;
+}
+
 }
 #endif //CPU_KERNELS_H
 

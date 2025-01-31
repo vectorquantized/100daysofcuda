@@ -21,24 +21,62 @@ inline void print_formatted_vector(const std::vector<float>& vec) {
 }
 
 inline bool compare_vectors(const float* vec1, const float* vec2, int size, float epsilon = 1e-4) {
+    int mismatches = 0;
+    float max_diff = 0.0f;
+    int max_diff_index = -1;
+
     for (int i = 0; i < size; ++i) {
-        if (std::abs(vec1[i] - vec2[i]) > epsilon) {
-            return false;
+        float diff = std::abs(vec1[i] - vec2[i]);
+        if (diff > epsilon) {
+            mismatches++;
+            if (diff > max_diff) {
+                max_diff = diff;
+                max_diff_index = i;
+            }
         }
     }
-    return true;
+
+    if (mismatches == 0) {
+        return true;  // All values match within tolerance
+    } else {
+        std::cout << "❌ CPU and GPU results **do not match**!\n"
+                  << "Total mismatches: " << mismatches << "/" << size << "\n"
+                  << "Max difference: " << max_diff << " at index " << max_diff_index << "\n"
+                  << "CPU: " << vec1[max_diff_index] << " | GPU: " << vec2[max_diff_index] << std::endl;
+        return false;
+    }
 }
+
+inline void print_vectors(const float* b_ref, const float* b_h, int size) {
+    float max_diff = 0.0f;
+    int max_diff_index = -1;
+
+    for (size_t i = 0; i < size; ++i) {
+    float diff = fabs(b_h[i] - b_ref[i]);
+        if (diff > max_diff) {
+            max_diff = diff;
+            max_diff_index = i;
+        }
+    }
+
+    std::cout << "🔍 Max Difference: " << max_diff 
+            << " at index " << max_diff_index << "\n"
+            << "GPU: " << b_h[max_diff_index] 
+            << " | CPU: " << b_ref[max_diff_index] 
+            << std::endl;
+}
+
 } //namespace cpu_utils
 
 // Macro definition
-#define COMPARE_RESULT(reference, output, size, epsilon)                      \
-    do {                                                                      \
+#define COMPARE_RESULT(reference, output, size, epsilon)                   \
+    do {                                                                   \
         bool validated = cpu_utils::compare_vectors(reference, output, size, epsilon); \
-        if (validated) {                                                     \
-            std::cout << "Test Passed!" << std::endl;                        \
-        } else {                                                             \
-            std::cout << "CPU and GPU kernel results don't match" << std::endl; \
-        }                                                                    \
+        if (validated) {                                                   \
+            std::cout << "✅ Test Passed! CPU and GPU outputs match.\n";   \
+        } else {                                                           \
+            std::cout << "❌ Test Failed! See above for mismatch details.\n"; \
+        }                                                                  \
     } while (0)
 
 #endif //CPU_UTILS_H

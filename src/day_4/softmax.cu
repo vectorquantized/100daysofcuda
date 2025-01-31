@@ -6,6 +6,7 @@
 #include "cuda/tensor.h"
 
 #define NUM_THREADS 256
+#define TILE_WIDTH 32
 
 
 __global__ void softmax(ten::Tensor input, ten::Tensor output, size_t M, size_t N) {
@@ -50,8 +51,8 @@ void kernel_launch(const ten::Tensor& a_d, const ten::Tensor& b_d, size_t M, siz
 
 
 int main(int argc, char* argv[]) {
-    size_t M = 1024;
-    size_t N = 32;
+    size_t M = 8192;
+    size_t N = 4096;
 
     unsigned int baseSeed = 42;
     std::vector<float> a_h(M * N);
@@ -72,6 +73,7 @@ int main(int argc, char* argv[]) {
     b_d.free();
     
     std::vector<float> b_ref = cpu_kernels::softmax<float>(a_h);
-    COMPARE_RESULT(b_ref.data(), b_h.data(), M * N, 1e-3);
+    COMPARE_RESULT(b_ref.data(), b_h.data(), M * N, 1e-6);
+    cpu_utils::print_vectors(b_ref.data(), b_h.data(), M*N);
     return 0;
 }
