@@ -77,3 +77,10 @@ The basic kernel works and is correct. We don't need to profile it to come to a 
 * The cpu kernel could use OpenMP, couldn't add it to the build system, will figure it out.
 * GPU kernel makes an assumption that rows >> cols, which may not be the case, actually, it isn't as Batch size is always << hidden dims.
 * Need to extend it to 3D Tensors of Shape: (B, L, D)
+
+
+## Day 4 Extending Softmax Kernel
+Tiled version
+* Observed that numerical precision of basic kernel is better compared tiled version (possibly due to reductions in tiled version?)
+* Also observed minimal speed differences between the two kernels.
+* Lack of speed needs investigation and perhaps better test cases.
