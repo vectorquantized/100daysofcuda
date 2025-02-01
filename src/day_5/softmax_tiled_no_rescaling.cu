@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
     a_d.free();
     b_d.free();
     
-    std::vector<float> b_ref = cpu_kernels::softmax<float>(a_h, M, N, EPSILON);
+    std::vector<float> b_ref = cpu_kernels::softmax_exact<float>(a_h, M, N, EPSILON);
     for(int i = 0; i < 20; ++i) {
         std::cout << "gpu: " << b_h[i] << ", cpu: " << b_ref[i] << std::endl;
     }

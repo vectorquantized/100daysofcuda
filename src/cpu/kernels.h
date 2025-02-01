@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <type_traits>
+#include <algorithm>
+#include <limits>
 // #include <omp.h>
 
 namespace cpu_kernels {
@@ -41,8 +43,51 @@ std::vector<T> softmax(const std::vector<T>& input) {
     return result;
 }
 
+
 template<typename T>
-std::vector<T> softmax(const std::vector<T>& input, size_t M, size_t N, float epsilon) {
+std::vector<T> softmax(const std::vector<T>& input, size_t M, size_t N, size_t TILE_WIDTH, T epsilon) {
+    std::vector<T> output(input.size());
+    
+    std::vector<T> row_max(M, -std::numeric_limits<T>::max());
+    std::vector<T> row_sum(M, static_cast<T>(0));
+    std::vector<std::vector<T>> exp_values(M, std::vector<T>(N, static_cast<T>(0)));
+
+    // Step 1: Compute max value per row
+    for (size_t row = 0; row < M; ++row) {
+        for (size_t col = 0; col < N; ++col) {
+            row_max[row] = std::max(row_max[row], input[row * N + col]);
+        }
+    }
+
+    // Step 2: Compute exp(x - max) per row and store in shared memory
+    for (size_t row = 0; row < M; ++row) {
+        for (size_t col = 0; col < N; ++col) {
+            exp_values[row][col] = exp_func(input[row * N + col] - row_max[row]);
+        }
+    }
+
+    // Step 3: Compute sum of exponentials per tile and rescale
+    T global_max = *std::max_element(row_max.begin(), row_max.end());
+    
+    for (size_t row = 0; row < M; ++row) {
+        for (size_t col = 0; col < N; ++col) {
+            row_sum[row] += exp_values[row][col];
+        }
+        row_sum[row] *= exp_func(row_max[row] - global_max);  // ✅ Rescale sum
+    }
+
+    // Step 4: Normalize
+    for (size_t row = 0; row < M; ++row) {
+        for (size_t col = 0; col < N; ++col) {
+            output[row * N + col] = (exp_values[row][col] * exp_func(row_max[row] - global_max)) / (row_sum[row] + epsilon);
+        }
+    }
+
+    return output;
+}
+
+template<typename T>
+std::vector<T> softmax_exact(const std::vector<T>& input, size_t M, size_t N, float epsilon) {
     std::vector<T> output(input.size());
     
     // Process each row separately
@@ -69,6 +114,7 @@ std::vector<T> softmax(const std::vector<T>& input, size_t M, size_t N, float ep
     
     return output;
 }
+
 
 }
 #endif //CPU_KERNELS_H
