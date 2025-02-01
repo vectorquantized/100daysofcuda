@@ -70,7 +70,7 @@ make day_3
 ./day_3
 ```
 
-## Day 4 Softmax Kernel
+## Day 5 Softmax Kernel
 Softmax basic kernel
 The basic kernel works and is correct. We don't need to profile it to come to a conclusion that it is slow, reading the kernel should lay out the memory access patterns.
 * Needs to be tiled. It is memory bound at this point, we're reading too much from HBM
@@ -79,8 +79,13 @@ The basic kernel works and is correct. We don't need to profile it to come to a 
 * Need to extend it to 3D Tensors of Shape: (B, L, D)
 
 
-## Day 4 Extending Softmax Kernel
+## Day 5 Extending Softmax Kernel
 Tiled version
 * Observed that numerical precision of basic kernel is better compared tiled version (possibly due to reductions in tiled version?)
 * Also observed minimal speed differences between the two kernels.
 * Lack of speed needs investigation and perhaps better test cases.
+
+## Day 6 Debugging Softmax Tiled Kernel
+* row sum and row max match the cpu version.
+* something is wrong with the way I am storing exp_vals. They don't match cpu softmax.
+* also rescaling could be an issue.
