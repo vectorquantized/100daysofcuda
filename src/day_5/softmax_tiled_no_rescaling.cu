@@ -7,7 +7,7 @@
 #include "cuda/tensor.h"
 
 #define NUM_THREADS 256
-#define TILE_WIDTH 32
+#define TILE_WIDTH 16
 #define EPSILON 1e-7
 
 // Let's start by softmax basic kernel and modify it to make it into tiled version.
@@ -83,8 +83,6 @@ void kernel_launch(const ten::Tensor& input, const ten::Tensor& output, size_t M
         );
     softmax_tiled<<<blocks_per_grid, threads_per_block>>>(input, output, M, N);
 }
-
-
 
 
 int main(int argc, char* argv[]) {

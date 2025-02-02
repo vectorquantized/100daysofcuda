@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <algorithm>
 #include <limits>
+#include <cfloat>
 // #include <omp.h>
 
 namespace cpu_kernels {
@@ -113,6 +114,31 @@ std::vector<T> softmax_exact(const std::vector<T>& input, size_t M, size_t N, fl
     }
     
     return output;
+}
+
+template <typename T>
+void online_softmax(const std::vector<T>& input, std::vector<T>& output, size_t M, size_t N, T epsilon) {
+
+    for (int row = 0; row < M; ++row) {
+        T row_max = static_cast<T>(-FLT_MAX);
+        T norm = static_cast<T>(0);
+
+        // Step 1: Find the max value for numerical stability
+        for (size_t col = 0; col < N; ++col) {
+            T curr_value = input[row * N + col];
+            if (curr_value > row_max) {
+                row_max = curr_value;
+                norm *= std::exp(row_max - curr_value);
+            }
+            norm += curr_value;
+        }
+
+        // Step 2: Compute softmax values
+        for (size_t col = 0; col < N; ++col) {
+            T value = std::exp(input[row * N + col] - row_max);
+            output[row * N + col] = value / (norm + epsilon);
+        }
+    }
 }
 
 

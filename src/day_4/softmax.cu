@@ -6,7 +6,6 @@
 #include "cuda/tensor.h"
 
 #define NUM_THREADS 256
-#define TILE_WIDTH 32
 
 
 __global__ void softmax(ten::Tensor input, ten::Tensor output, size_t M, size_t N) {
@@ -33,18 +32,12 @@ __global__ void softmax(ten::Tensor input, ten::Tensor output, size_t M, size_t 
 
 
 void kernel_launch(const ten::Tensor& a_d, const ten::Tensor& b_d, size_t M, size_t N) {
-    TIMED_CUDA_FUNCTION();
     int block_size_x = NUM_THREADS;
     int block_size_y = NUM_THREADS;
 
     dim3 threads_per_block(block_size_x, block_size_y);
     dim3 blocks_per_grid ((M + block_size_y - 1) / block_size_y);
-    
-    TIMED_CUDA_BLOCK("Stream tiled");
     softmax<<<blocks_per_grid, threads_per_block>>>(a_d, b_d, M, N);
-    
-    CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
-    
 }
 
 
@@ -55,19 +48,50 @@ int main(int argc, char* argv[]) {
     size_t N = 4096;
 
     unsigned int baseSeed = 42;
-    std::vector<float> a_h(M * N);
-    std::vector<float> b_h(M * N);
+    PinnedVector<float> a_h(M * N);
+    PinnedVector<float> b_h(M * N);
     cpu_utils::init_random_vector(a_h, M * N, baseSeed);
     
     ten::Tensor a_d, b_d;
     a_d.allocate(M * N);
     b_d.allocate(M * N);
     
-    CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), M * N * sizeof(float), cudaMemcpyHostToDevice));
+    {
+        TIMED_CUDA_BLOCK("💾 Memory Allocation on Device");
+        a_d.allocate(M * N);
+        b_d.allocate(M * N);
+    }
     
-    kernel_launch(a_d, b_d, M, N);
+    {
+        TIMED_CUDA_BLOCK("💾 Mem copy (cudaMemcpyHostToDevice)");
+        CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), M * N * sizeof(float), cudaMemcpyHostToDevice));
+    }
 
-    CUDA_ERROR_CHECK(cudaMemcpy(b_h.data(), b_d.data, M * N * sizeof(float), cudaMemcpyDeviceToHost));
+    {
+        cudaEvent_t start, stop;
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+        cudaEventRecord(start);
+        // TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+        kernel_launch(a_d, b_d, M, N);
+        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+        cudaEventRecord(stop);
+        cudaEventSynchronize(stop);
+        float milliseconds = 0.0f;
+        cudaEventElapsedTime(&milliseconds, start, stop);
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+        constexpr size_t col_width = 40;
+        
+        std::cout << std::left << std::setw(col_width) <<  "🚀 Kernel execution time"
+                  << ":  " << std::fixed << std::setprecision(3) 
+                  << std::setw(8) << milliseconds << " ms" << std::endl;
+    }
+
+    {
+        TIMED_CUDA_BLOCK("💾 Mem copy (cudaMemcpyDeviceToHost)");
+        CUDA_ERROR_CHECK(cudaMemcpy(b_h.data(), b_d.data, M * N * sizeof(float), cudaMemcpyDeviceToHost));
+    }
     
     a_d.free();
     b_d.free();
