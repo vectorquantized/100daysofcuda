@@ -4,14 +4,23 @@
 #include <random>
 #include <vector>
 #include <fmt/core.h>
+#include <execution>  // C++17 Parallel STL
 
 namespace cpu_utils {
-void init_random_vector(std::vector<float>& array, size_t size, unsigned int seed) {
+    
+template <typename Allocator = std::allocator<float>>
+void init_random_vector(std::vector<float, Allocator>& array, size_t size, unsigned int seed) {
     std::mt19937 generator(seed);
-    std::uniform_real_distribution<float> distribution (0.0f, 1.0f);
-    for(size_t i = 0; i< size; ++i) {
-        array[i] = distribution(generator);
+    std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+
+    // Ensure vector is resized properly
+    if (array.size() != size) {
+        array.resize(size);
     }
+
+    // Generate random values directly into array
+    std::generate(std::execution::par_unseq, array.begin(), array.end(),
+                  [&]() { return distribution(generator); });
 }
 
 inline void print_formatted_vector(const std::vector<float>& vec) {

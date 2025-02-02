@@ -19,7 +19,6 @@ __global__ void softmax_tiled(ten::Tensor input, ten::Tensor output,
 
     __shared__ float shared_max[TILE_WIDTH][TILE_WIDTH + 1];
     __shared__ float row_sums[TILE_WIDTH];
-    __shared__ float exp_values[TILE_WIDTH][TILE_WIDTH + 1];
 
     if (row >= M) return;
 
@@ -43,15 +42,12 @@ __global__ void softmax_tiled(ten::Tensor input, ten::Tensor output,
     float max_val = shared_max[ty][0];
     __syncthreads();
 
-    // Step 2: Compute exp(x - max) and store in shared memory
     float thread_sum = 0.0f;
     for (int i = 0; i < (N + blockDim.x - 1) / blockDim.x; i++) {
         int col = i * blockDim.x + tx;
         if (col < N) {
             float val = expf(input[row * N + col] - max_val);
             thread_sum += val;
-            // exp_values[ty][i] = val;  // Store for this iteration
-            exp_values[ty][col % TILE_WIDTH] = val; 
         }
     }
 
@@ -68,19 +64,14 @@ __global__ void softmax_tiled(ten::Tensor input, ten::Tensor output,
     }
     __syncthreads();
 
-    // Step 4: Normalize using stored exp_values from shared memory
     float final_sum = row_sums[ty];
      
-    for (int i = 0; i < (N + blockDim.x - 1) / blockDim.x; i++) {
-        int col = i * blockDim.x + tx;
-        if (col < N) {
-            // Use the exp value we stored for this iteration
-            output[row * N + col] = (exp_values[ty][tx] * expf(shared_max[ty][0] - shared_max[0][0])) / (final_sum + EPSILON);
-        }
+     for (int c = tx; c < N; c += TILE_WIDTH) {
+        float value = expf(input[row * N + c] - max_val); // Stabilized exp
+        output[row * N + c] = value / (final_sum + EPSILON);
     }
 }
 void kernel_launch(const ten::Tensor& input, const ten::Tensor& output, size_t M, size_t N) {
-    TIMED_CUDA_FUNCTION();
 
     dim3 threads_per_block(TILE_WIDTH, TILE_WIDTH);
     dim3 blocks_per_grid (
@@ -88,43 +79,48 @@ void kernel_launch(const ten::Tensor& input, const ten::Tensor& output, size_t M
             (M + TILE_WIDTH - 1) / TILE_WIDTH
         );
     
-    TIMED_CUDA_BLOCK("softmax tiled");
     softmax_tiled<<<blocks_per_grid, threads_per_block>>>(input, output, M, N);
-    
-    CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
     
 }
 
 
-
-
 int main(int argc, char* argv[]) {
-    size_t M = 512;
-    size_t N = 512;
+    size_t M = 8192;
+    size_t N = 4096;
 
     unsigned int baseSeed = 42;
-    std::vector<float> a_h(M * N);
-    std::vector<float> b_h(M * N);
+    // Use pinned memory for std::vector
+    PinnedVector<float> a_h(M * N);
+    PinnedVector<float> b_h(M * N);
+
     cpu_utils::init_random_vector(a_h, M * N, baseSeed);
     
     ten::Tensor a_d, b_d;
     a_d.allocate(M * N);
     b_d.allocate(M * N);
     
-    CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), M * N * sizeof(float), cudaMemcpyHostToDevice));
-    
-    kernel_launch(a_d, b_d, M, N);
+    // Memcpy HostToDevice
+    {
+        TIMED_CUDA_BLOCK("💾 Mem copy (cudaMemcpyHostToDevice)");
+        CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), M * N * sizeof(float), cudaMemcpyHostToDevice));
+    }
 
-    CUDA_ERROR_CHECK(cudaMemcpy(b_h.data(), b_d.data, M * N * sizeof(float), cudaMemcpyDeviceToHost));
-    
+    {
+        TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+        kernel_launch(a_d, b_d, M, N);
+        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    }
+
+    {
+        TIMED_CUDA_BLOCK("💾 Mem copy (cudaMemcpyDeviceToHost)");
+        CUDA_ERROR_CHECK(cudaMemcpy(b_h.data(), b_d.data, M * N * sizeof(float), cudaMemcpyDeviceToHost));
+    }
+
     a_d.free();
     b_d.free();
     
+    // Convert to standard vector
     std::vector<float> b_ref = cpu_kernels::softmax<float>(a_h, M, N, TILE_WIDTH, EPSILON);
-    for(int i = 0; i < 20; ++i) {
-        std::cout << "gpu: " << b_h[i] << ", cpu: " << b_ref[i] << std::endl;
-    }
     COMPARE_RESULT(b_ref.data(), b_h.data(), M * N, 1e-5);
-    cpu_utils::print_vectors(b_ref.data(), b_h.data(), M*N);
     return 0;
 }
