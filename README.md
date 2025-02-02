@@ -99,20 +99,36 @@ Few things to note:
 * Online softmax is not a magic pill or one size fits all. It's needed in specific scenarios. 
     * If matrix size is smallish like 8192 x 8192 then we have a batch size: 8192 and hidden size 8192. 
     * The naive version might end up being faster as online version has branching and we might see divergence.
-* The online version is exploting the property that $\exp^{a + b} = \exp^{a \times b}$.
+* The online version is exploting the property that $e^{a + b} = e^{a} \cdot e^{b}$.
 * We calculate the norm and max in one pass but we also need to perform rescaling of the norm. Let's see why:
         
-        `x = [1, 3, 4, 2]`, at index `0`, the value `1` is max, so we could just do: 
-        $
-            global_max = max_i <br> norm = \exp^{(x_i - global_max)} = \exp^(1-1)
-        $.
-        At index `1` $max$ becomes `3`. The value of the global maximum has changed, so the previously calculated $norm$ needs to be updated.
-        We could re-write 
-        $
-            \exp^{(x_i - global_max)} = \exp^{(x_i - max_i)} \times \exp^{(max_i - global_max)}
-        $
-        The quantity $\exp^{(max_i - global_max)}$ becomes the rescaling factor. In the example above, at index 1, we update the norm as `norm *= exp(1 - 3)`
-        we then add to $norm$ the exponentiated value: `norm += exp(x_i - global_max)`
+`x = [1, 3, 4, 2]`, at index `0`, the value `1` is max, so we could just do:
+
+$$
+\text{max} = max_{i} 
+$$
+$$
+\text{norm} = e^{(x_{i} - \text{max})} = e^{(1 - 1)}
+$$
+
+At index `1`, $\text{max}$ becomes `3`. The value of the global maximum $\text{max}$ has changed, so the previously calculated $\text{norm}$ needs to be updated.
+
+We could re-write:
+
+$$
+e^{(x_{i} - \text{max})} = e^{(x_{i} - max_{i})} \cdot e^{(max_{i} - \text{max})}
+$$
+
+The quantity $e^{(max_{i} - \text{max})}$ becomes the **rescaling factor**.  
+In the example above, at index `1$, we update the norm as:
+
+```cpp
+norm *= exp(1 - 3)
+```
+We then add to $\text{norm}$ the exponentiated value:
+```cpp
+norm += exp(x[i] - max)
+```
 
 * The kernel runtimes are as follows:
 ```
