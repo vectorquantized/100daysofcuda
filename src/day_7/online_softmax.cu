@@ -11,48 +11,71 @@
 #define EPSILON 1e-7
 
 
-__global__ void online_softmax(ten::Tensor input, ten::Tensor output,
-                            size_t M, size_t N) {
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int row = blockIdx.y * blockDim.y + ty;
+__global__ void online_softmax(ten::Tensor input, ten::Tensor output, size_t M, size_t N) {
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (row < M) {
 
-    if (row >= M) return;
+        float thread_max = -FLT_MAX;
+        float norm = 0.0f;
 
-    // Step 1: Find max value
-    float thread_max = -FLT_MAX;
-    float norm = 0.0f;
-    for (int col = 0; col < N; ++col) {
-        if (col < N) {
+        for (int col = 0; col < N; ++col) {
             float curr_value = input[row * N + col];
             if (curr_value > thread_max) {
-                thread_max = curr_value;
                 norm *= expf(thread_max - curr_value);
+                thread_max = curr_value;
             }
-            norm += curr_value;
+            norm += expf(curr_value - thread_max);
+
+        }
+
+        for (int col = 0; col < N; ++col) {
+            output[row * N + col] = expf(input[row * N + col] - thread_max) / (norm + EPSILON);
         }
     }
-    
-     for (int c = tx; c < N; c += TILE_WIDTH) {
-        float value = expf(input[row * N + c] - thread_max); // Stabilized exp
-        output[row * N + c] = value / (norm + EPSILON);
+}
+
+__global__ void softmax(ten::Tensor input, ten::Tensor output, size_t M, size_t N) {
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (row < M) {
+        float max_value = 0.0f;
+        float row_sum = 0.0f;
+
+        for (int col = 0; col < N; ++col) {
+            max_value = max(max_value, input[row * N + col]);
+        }
+
+        for (int col = 0; col < N; ++col) {
+            float value = expf(input[row * N + col] - max_value);
+            row_sum += value;
+        }
+
+        for (int col = 0; col < N; ++col) {
+            output[row * N + col] = expf(input[row * N + col] - max_value) / row_sum;
+        }
     }
 }
+
 void kernel_launch(const ten::Tensor& input, const ten::Tensor& output, size_t M, size_t N) {
 
-    dim3 threads_per_block(TILE_WIDTH, TILE_WIDTH);
-    dim3 blocks_per_grid (
-            (N + TILE_WIDTH - 1) / TILE_WIDTH,
-            (M + TILE_WIDTH - 1) / TILE_WIDTH
-        );
-    online_softmax<<<blocks_per_grid, threads_per_block>>>(input, output, M, N);
+    dim3 threads_per_block(NUM_THREADS);
+    dim3 blocks_per_grid((M + NUM_THREADS - 1) / NUM_THREADS);
     
+    online_softmax<<<blocks_per_grid, threads_per_block>>>(input, output, M, N);
 }
 
+void kernel_launch_softmax(const ten::Tensor& input, const ten::Tensor& output, size_t M, size_t N) {
+
+    dim3 threads_per_block(NUM_THREADS);
+    dim3 blocks_per_grid((M + NUM_THREADS - 1) / NUM_THREADS);
+    
+    softmax<<<blocks_per_grid, threads_per_block>>>(input, output, M, N);
+}
 
 int main(int argc, char* argv[]) {
-    size_t M = 8192;
-    size_t N = 4096;
+    size_t M = 32768;
+    size_t N = 16384;
 
     unsigned int baseSeed = 42;
     // Use pinned memory for std::vector
@@ -76,6 +99,24 @@ int main(int argc, char* argv[]) {
 
     {
         TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+        kernel_launch_softmax(a_d, b_d, M, N);
+        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    }
+
+    {
+        TIMED_CUDA_BLOCK("🚀 Online Kernel execution time");
+        kernel_launch(a_d, b_d, M, N);
+        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    }
+
+    {
+        TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+        kernel_launch_softmax(a_d, b_d, M, N);
+        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    }
+
+    {
+        TIMED_CUDA_BLOCK("🚀 Online Kernel execution time");
         kernel_launch(a_d, b_d, M, N);
         CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
     }
@@ -88,8 +129,8 @@ int main(int argc, char* argv[]) {
     a_d.free();
     b_d.free();
     
-    // Convert to standard vector
     std::vector<float> b_ref(a_h.size());
+    b_ref.resize(a_h.size());
     cpu_kernels::online_softmax<float>(a_h, b_ref, M, N, EPSILON);
     COMPARE_RESULT(b_ref.data(), b_h.data(), M * N, 1e-5);
     return 0;

@@ -127,11 +127,15 @@ void online_softmax(const std::vector<T>& input, std::vector<T>& output, size_t 
         for (size_t col = 0; col < N; ++col) {
             T curr_value = input[row * N + col];
             if (curr_value > row_max) {
-                row_max = curr_value;
                 norm *= std::exp(row_max - curr_value);
+                row_max = curr_value;
             }
-            norm += curr_value;
+            norm += std::exp(curr_value - row_max);
         }
+        // For the first row only
+        // if (row == 0) {
+        //     std::cout << "CPU - First row max: " << row_max << ", norm: " << norm << std::endl;
+        // }
 
         // Step 2: Compute softmax values
         for (size_t col = 0; col < N; ++col) {
