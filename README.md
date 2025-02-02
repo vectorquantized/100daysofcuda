@@ -94,3 +94,36 @@ Tiled version
  
 ## Day 7 Online Softmax
 This is very close to what is done in FlashAttention paper.
+But we'll build it step by step. 
+Few things to note: 
+* Online softmax is not a magic pill or one size fits all. It's needed in specific scenarios. 
+    * If matrix size is smallish like 8192 x 8192 then we have a batch size: 8192 and hidden size 8192. 
+    * The naive version might end up being faster as online version has branching and we might see divergence.
+* The online version is exploting the property that $\exp^{a + b} = \exp^{a \times b}$.
+* We calculate the norm and max in one pass but we also need to perform rescaling of the norm. Let's see why:
+        
+        `x = [1, 3, 4, 2]`, at index `0`, the value `1` is max, so we could just do: 
+        $
+            global_max = max_i <br> norm = \exp^{(x_i - global_max)} = \exp^(1-1)
+        $.
+        At index `1` $max$ becomes `3`. The value of the global maximum has changed, so the previously calculated $norm$ needs to be updated.
+        We could re-write 
+        $
+            \exp^{(x_i - global_max)} = \exp^{(x_i - max_i)} \times \exp^{(max_i - global_max)}
+        $
+        The quantity $\exp^{(max_i - global_max)}$ becomes the rescaling factor. In the example above, at index 1, we update the norm as `norm *= exp(1 - 3)`
+        we then add to $norm$ the exponentiated value: `norm += exp(x_i - global_max)`
+
+* The kernel runtimes are as follows:
+```
+💾 Memory Allocation on Device        :  0.638    ms
+💾 Mem copy (cudaMemcpyHostToDevice)  :  88.360   ms
+🚀 Kernel execution time              :  95.489   ms
+🚀 Online Kernel execution time       :  91.670   ms
+🚀 Kernel execution time              :  94.027   ms
+🚀 Online Kernel execution time       :  89.229   ms
+💾 Mem copy (cudaMemcpyDeviceToHost)  :  106.156  ms
+✅ Test Passed! CPU and GPU outputs match.
+```
+
+
