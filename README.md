@@ -87,5 +87,10 @@ Tiled version
 
 ## Day 6 Debugging Softmax Tiled Kernel
 * row sum and row max match the cpu version.
-* something is wrong with the way I am storing exp_vals. They don't match cpu softmax.
-* also rescaling could be an issue.
+* ~something is wrong with the way I am storing exp_vals. They don't match cpu softmax.~
+    * No need to use exp_vals, will tackle this in may be the online version.  
+* ~also rescaling could be an issue.~
+    * This is only valid for online version.
+ 
+## Day 7 Online Softmax
+This is very close to what is done in FlashAttention paper.
