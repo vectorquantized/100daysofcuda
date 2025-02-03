@@ -132,10 +132,6 @@ void online_softmax(const std::vector<T>& input, std::vector<T>& output, size_t 
             }
             norm += std::exp(curr_value - row_max);
         }
-        // For the first row only
-        // if (row == 0) {
-        //     std::cout << "CPU - First row max: " << row_max << ", norm: " << norm << std::endl;
-        // }
 
         // Step 2: Compute softmax values
         for (size_t col = 0; col < N; ++col) {
@@ -145,6 +141,42 @@ void online_softmax(const std::vector<T>& input, std::vector<T>& output, size_t 
     }
 }
 
+template <typename T>
+void batched_online_softmax(const std::vector<T>& input, std::vector<T>& output, 
+                           size_t B, size_t L, size_t D, T epsilon) {
+   
+    size_t total_elements = B * L * D;
+    
+    for (size_t output_idx = 0; output_idx < total_elements; ++output_idx) {
+      
+        int batch_idx = output_idx / (L * D);
+        int seq_idx = (output_idx / D) % L;
+        
+        if (batch_idx < B && seq_idx < L) {  // Same check as GPU
+            T thread_max = static_cast<T>(-FLT_MAX);
+            T norm = static_cast<T>(0);
+            
+           
+            size_t base_idx = batch_idx * L * D + seq_idx * D;
+            
+         
+            for (size_t elem_idx = 0; elem_idx < D; ++elem_idx) {
+                T curr_value = input[base_idx + elem_idx];
+                if (curr_value > thread_max) {
+                    norm *= std::exp(thread_max - curr_value);
+                    thread_max = curr_value;
+                }
+                norm += std::exp(curr_value - thread_max);
+            }
+            
+       
+            for (size_t elem_idx = 0; elem_idx < D; ++elem_idx) {
+                output[base_idx + elem_idx] = 
+                    std::exp(input[base_idx + elem_idx] - thread_max) / (norm + epsilon);
+            }
+        }
+    }
+}
 
 }
 #endif //CPU_KERNELS_H

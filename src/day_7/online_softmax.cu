@@ -74,8 +74,8 @@ void kernel_launch_softmax(const ten::Tensor& input, const ten::Tensor& output, 
 }
 
 int main(int argc, char* argv[]) {
-    size_t M = 32768;
-    size_t N = 16384;
+    size_t M = 8192;
+    size_t N = 2048;
 
     unsigned int baseSeed = 42;
     // Use pinned memory for std::vector
@@ -97,23 +97,23 @@ int main(int argc, char* argv[]) {
         CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), M * N * sizeof(float), cudaMemcpyHostToDevice));
     }
 
-    {
-        TIMED_CUDA_BLOCK("🚀 Kernel execution time");
-        kernel_launch_softmax(a_d, b_d, M, N);
-        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
-    }
+    // {
+    //     TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+    //     kernel_launch_softmax(a_d, b_d, M, N);
+    //     CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    // }
 
-    {
-        TIMED_CUDA_BLOCK("🚀 Online Kernel execution time");
-        kernel_launch(a_d, b_d, M, N);
-        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
-    }
+    // {
+    //     TIMED_CUDA_BLOCK("🚀 Online Kernel execution time");
+    //     kernel_launch(a_d, b_d, M, N);
+    //     CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    // }
 
-    {
-        TIMED_CUDA_BLOCK("🚀 Kernel execution time");
-        kernel_launch_softmax(a_d, b_d, M, N);
-        CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
-    }
+    // {
+    //     TIMED_CUDA_BLOCK("🚀 Kernel execution time");
+    //     kernel_launch_softmax(a_d, b_d, M, N);
+    //     CUDA_ERROR_CHECK(cudaDeviceSynchronize()); // Barrier sync
+    // }
 
     {
         TIMED_CUDA_BLOCK("🚀 Online Kernel execution time");

@@ -142,4 +142,32 @@ norm += exp(x[i] - max)
 ✅ Test Passed! CPU and GPU outputs match.
 ```
 
+## Day 9 Batched softmax
+We are still on softmax, one might wonder why softmax and why so much time on softmax. Softmax offers an opprtunity to go tiled, has reduction operations and has an online version. So far we've done tiled, online and naive. We wanted to do batched version to take a step closer to implementing self attention and flash attention. By introducing a batched dimension, we are able to see clear benefits of online softmax. In self attention, the input is of shape: (B, L, D) which we transform to (B, L, h, d) -> (B, h, L, d) -> scale(Q)K ->  Softmax(scale(Q)K). Softmax is usually applied on shape: (B, h, L). When B is higher and h is decently higher and L is large, we need online softmax. We've implemented this as:
+
+```cpp
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    if (row >= B * L) return; 
+
+    int batch_idx = row / L;
+    int seq_idx = row % L;
+```
+We launch `B*L` threads per block and each thread operates on D dimensions. Although this can be improved and is the topic for tomorrow but we clearly see online softmax winning in perf time compared to offline.
+
+Some numbers on `NVIDIA RTX 2000`
+```
+Mesuring performance characteristics of online vs offline softmax
+💾 Memory Allocation on Device        :  0.899    ms
+💾 Mem copy (cudaMemcpyHostToDevice)  :  318.910  ms
+🚀 Kernel execution time              :  244.755  ms
+🚀 Online Kernel execution time       :  206.970  ms
+🚀 Kernel execution time              :  250.438  ms
+🚀 Online Kernel execution time       :  206.711  ms
+💾 Mem copy (cudaMemcpyDeviceToHost)  :  325.269  ms
+```
+
+There's a difference of 44 ms between the two kernels, with online version faster than the offline one by ~44 ms or online version is 17.46% faster.
+
+
+
 
