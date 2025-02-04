@@ -55,7 +55,7 @@ struct Tensor {
     }
 
     // In-place transposition on device
-    __device__ void transpose(const int* perm) {
+    __host__ __device__ void transpose(const int* perm) {
         int temp_shape[10];   // TODO: change this, although 10 works for now.
         int temp_strides[10]; // Buffer for transposed metadata
 

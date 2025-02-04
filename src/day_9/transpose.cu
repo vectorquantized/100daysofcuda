@@ -52,9 +52,11 @@ int main() {
 
     // Launch transpose kernel (metadata update)
     transpose_kernel<<<1, 1>>>(tensor, d_perm);
+    // uncomment for cpu version
+    // tensor.transpose(h_perm);
     CUDA_ERROR_CHECK(cudaDeviceSynchronize());
 
-    // No need to copy back! Host and Device share memory
+    // No need to copy back! Host and Device share memory as we used unified memory.
     std::cout << "New Shape: ";
     for (int i = 0; i < dims; i++) std::cout << tensor.shape[i] << " ";
     std::cout << std::endl;

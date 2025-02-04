@@ -168,6 +168,20 @@ Mesuring performance characteristics of online vs offline softmax
 
 There's a difference of 44 ms between the two kernels, with online version faster than the offline one by ~44 ms or online version is 17.46% faster.
 
-
+## Day 9 Tensor Transpose using metadata
+Made a transpose function inspired by PyTorch to only change metadata. No data movement needed for now.
+transpose works both on host and device as both `__host__` and `__device__` have been added to the function signature.
+```
+cmake ..
+make day_9
+...
+...
+./day_9
+output:
+Old Shape: 2 4 3 2 
+Old Strides: 24 6 2 1 
+New Shape: 4 2 2 3 
+New Strides: 6 24 1 2 
+```
 
 
