@@ -177,7 +177,7 @@ void batched_online_softmax(const std::vector<T>& input, std::vector<T>& output,
         }
     }
 }
-
 }
+
 #endif //CPU_KERNELS_H
 

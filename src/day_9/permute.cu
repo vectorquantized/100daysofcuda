@@ -12,9 +12,9 @@
 #define TILE_WIDTH 32
 #define EPSILON 1e-7
 
-__global__ void transpose_kernel(ten::Tensor tensor, const int* perm) {
+__global__ void permute_kernel(ten::Tensor tensor, const int* perm) {
     if (threadIdx.x == 0) { 
-        tensor.transpose(perm);
+        tensor.permute(perm);
     }
 }
 
@@ -50,10 +50,10 @@ int main() {
     CUDA_ERROR_CHECK(cudaMallocManaged(&d_perm, dims * sizeof(int)));  // Use Unified Memory
     CUDA_ERROR_CHECK(cudaMemcpy(d_perm, h_perm, dims * sizeof(int), cudaMemcpyHostToDevice));
 
-    // Launch transpose kernel (metadata update)
-    transpose_kernel<<<1, 1>>>(tensor, d_perm);
+    // Launch permute kernel (metadata update)
+    permute_kernel<<<1, 1>>>(tensor, d_perm);
     // uncomment for cpu version
-    // tensor.transpose(h_perm);
+    // tensor.permute(h_perm);
     CUDA_ERROR_CHECK(cudaDeviceSynchronize());
 
     // No need to copy back! Host and Device share memory as we used unified memory.

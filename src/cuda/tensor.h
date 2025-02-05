@@ -55,7 +55,7 @@ struct Tensor {
     }
 
     // In-place transposition on device
-    __host__ __device__ void transpose(const int* perm) {
+    __host__ __device__ void permute(const int* perm) {
         int temp_shape[10];   // TODO: change this, although 10 works for now.
         int temp_strides[10]; // Buffer for transposed metadata
 
@@ -72,11 +72,41 @@ struct Tensor {
         }
     }
 
+    template <typename... Indices>
+    __host__ __device__ float* get(Indices... indices) {
+        static_assert(sizeof...(indices) <= 10, "Too many indices provided!");  // in line with max number of dims.
+        int idx_array[] = {indices...};
+
+        int flat_index = 0;
+        for (int i = 0; i < sizeof...(indices); ++i) {
+            flat_index += idx_array[i] * strides[i];
+        }
+
+        return &data[flat_index];
+    }
+
     // 1D access for raw pointer-style indexing
     __device__ float& operator[](int index) {
         return data[index];
     }
 };
+
+template <typename... Shape>
+__host__ Tensor zeros(Shape... shape) {
+    constexpr int dims = sizeof...(Shape);
+    int shape_array[] = {shape...};
+    int total_size = 1;
+    for (int i=0; i < dims; ++i) {
+        total_size *= shape_array[i];
+    }
+    Tensor tensor;
+    tensor.allocate(total_size, dims);
+    CUDA_ERROR_CHECK(cudaMemcpy(tensor.shape, shape_array, dims * sizeof(int), cudaMemcpyHostToDevice));
+    tensor.compute_strides();
+    CUDA_ERROR_CHECK(cudaMemset(tensor.data, 0, total_size * sizeof(float)));
+    return tensor;
+}
+
 
 }
 
