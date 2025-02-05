@@ -183,5 +183,18 @@ Old Strides: 24 6 2 1
 New Shape: 4 2 2 3 
 New Strides: 6 24 1 2 
 ```
+## Day 10 Self Attention
+Based on the previous work, utilized tiled matmul, transpose and batched online softmax to sticth together a self attention kernel.
+It is decent, but in order to test it, I'd have to make sure I build python extensions now, as testing gets harder in C++ land with these extensive kernels.
+
+Some logical next steps for the next few days:
+    * Fuse Transpose, GEMM, online softmax and the final GEMM
+    * Online softmax could be tiled.
+    * Using Warp Level Reductions.
+    * Using Tensor Cores.
+    * Extend it to run on longer sequences.
+
+It's best to iterate on the base kernels by virtue of self attention kernel.
+
 
 
