@@ -196,5 +196,33 @@ Some logical next steps for the next few days:
 
 It's best to iterate on the base kernels by virtue of self attention kernel.
 
+## Day 11 PyTorch Integration and Benchmarking
+* Templatized the GEMM tiled kernel
+* Added batched version of GEMM tiled kernel
+    * We pass in batch_size in the z dimension of the gridDim, it is accessible as blockDim.z
+    * We let each batch run in parallel, all we do is reach the right batch location and run GEMM_TILED on it
+* PyTorch integration is added
+* Profiling using PyTorch profiler is added
+* Benchmarking results for `bmm`
+```
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  Total MFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                             custom_bmm         0.00%       0.000us         0.00%       0.000us       0.000us     586.641us        87.24%     586.641us     586.641us             1            --  
+void batched_gemm_tiled<float, 16, float>(float cons...         0.00%       0.000us         0.00%       0.000us       0.000us     566.610us        84.26%     566.610us     566.610us             1            --  
+                                              torch_bmm         2.18%      83.562us         4.45%     170.425us     170.425us       0.000us         0.00%     101.790us     101.790us             1            --  
+                                              aten::bmm         1.88%      71.962us         2.27%      86.863us      86.863us     101.790us        15.14%     101.790us     101.790us             1       536.871  
+                                ampere_sgemm_128x128_nn         0.00%       0.000us         0.00%       0.000us       0.000us     101.790us        15.14%     101.790us     101.790us             1            --  
+                                              torch_bmm         0.00%       0.000us         0.00%       0.000us       0.000us     101.790us        15.14%     101.790us     101.790us             1            --  
+                                             custom_bmm         7.95%     304.378us        95.44%       3.654ms       3.654ms       0.000us         0.00%       4.032us       4.032us             1            --  
+                                            aten::zeros         1.59%      60.902us        72.41%       2.772ms       2.772ms       0.000us         0.00%       4.032us       4.032us             1            --  
+                                            aten::zero_         0.46%      17.570us         2.13%      81.572us      81.572us       0.000us         0.00%       4.032us       4.032us             1            --  
+                                            aten::fill_         0.66%      25.181us         1.67%      64.002us      64.002us       4.032us         0.60%       4.032us       4.032us             1            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 3.829ms
+Self CUDA time total: 672.432us
+```
+PyTorch uses CUBLASS and there are a ton of optimization we could perform in the GEMM kernel, right now it runs 5x slower. it won't reach the performance of PyTorch's BMM but the aim would be to bring it closer. Before that though, the full integrated self attention kernel needs to be run.
+
 
 
