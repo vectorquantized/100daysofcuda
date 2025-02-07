@@ -224,5 +224,29 @@ Self CUDA time total: 672.432us
 ```
 PyTorch uses CUBLASS and there are a ton of optimization we could perform in the GEMM kernel, right now it runs 5x slower. it won't reach the performance of PyTorch's BMM but the aim would be to bring it closer. Before that though, the full integrated self attention kernel needs to be run.
 
-
+## Day 12 Peak into CublasLt
+* Benchmarked cublasLtMatmul against torch::bmm
+* cublasLtMatmul requires a very detailed setup and one needs to be thorough
+* Reason for picking this exercise was to see if there's anything special that PyTorch does for GEMM
+    * The solution is to use cublasLtMatmul
+* Below are the results
+```
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  Total MFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                ampere_sgemm_128x128_nn         0.00%       0.000us         0.00%       0.000us       0.000us     204.859us        98.03%     204.859us     102.429us             2            --  
+                                          cublaslt_gemm         0.00%       0.000us         0.00%       0.000us       0.000us     106.620us        51.02%     106.620us      53.310us             2            --  
+                                              torch_bmm         1.30%      52.282us         4.97%     200.606us     200.606us       0.000us         0.00%     102.366us     102.366us             1            --  
+                                           aten::matmul         1.07%      43.081us         3.68%     148.324us     148.324us       0.000us         0.00%     102.366us     102.366us             1            --  
+                                              aten::bmm         1.31%      52.711us         1.62%      65.372us      65.372us     102.366us        48.98%     102.366us     102.366us             1       536.871  
+                                              torch_bmm         0.00%       0.000us         0.00%       0.000us       0.000us     102.366us        48.98%     102.366us     102.366us             1            --  
+                                          cublaslt_gemm         8.97%     361.761us        94.91%       3.828ms       3.828ms       0.000us         0.00%       4.127us       4.127us             1            --  
+                                            aten::zeros         1.60%      64.331us        69.67%       2.810ms       2.810ms       0.000us         0.00%       4.127us       4.127us             1            --  
+                                            aten::zero_         0.46%      18.420us         2.04%      82.222us      82.222us       0.000us         0.00%       4.127us       4.127us             1            --  
+                                            aten::fill_         0.62%      25.151us         1.58%      63.802us      63.802us       4.127us         1.97%       4.127us       4.127us             1            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 4.033ms
+Self CUDA time total: 208.986us
+```
+Overall we do fine, there's a slight difference of `4 microseconds` or `~2%`, we'll look into it at some point.
 
