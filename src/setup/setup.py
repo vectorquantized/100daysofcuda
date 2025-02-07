@@ -10,12 +10,13 @@ import torch.utils.cpp_extension
 torch_include_paths = torch.utils.cpp_extension.include_paths()
 
 setup(
-    name="attention_bench",
+    name="gemm_bench",
     ext_modules=[
         CUDAExtension(
-            "attention_bench",
-            ["day_11/attention_bench.cu"],
-            include_dirs=[cuda_include_path] + torch_include_paths,  # Add both CUDA and PyTorch headers
+            "gemm_bench",
+            ["../day_12/gemm_bench.cu"],
+            include_dirs=[cuda_include_path] + torch_include_paths,
+            libraries=["cublas", "cublasLt"],
             extra_compile_args={
                 "cxx": [f"-I{cuda_include_path}"] + [f"-I{p}" for p in torch_include_paths],  # Pass to g++
                 "nvcc": [f"-I{cuda_include_path}"] + [f"-I{p}" for p in torch_include_paths] + ["-O3"]  # Pass to nvcc
