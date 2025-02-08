@@ -22,11 +22,11 @@ with torch.profiler.profile(
 
     with torch.profiler.record_function("custom_bmm"):
         C_custom = gemm_tiled_bench.bmm(A, B, scale)
-        torch.cuda.synchronize()  # ✅ Ensure kernel execution is completed
+        torch.cuda.synchronize()
 
     with torch.profiler.record_function("custom_bmm_coarsened"):
         C_custom_coarsened = gemm_tiled_bench.bmm_coarsened(A, B, scale)
-        torch.cuda.synchronize()  # ✅ Ensure all CUDA operations are finished
+        torch.cuda.synchronize()
 
 print(f"Matrices match: {torch.allclose(C_custom, C_custom_coarsened)}")
 

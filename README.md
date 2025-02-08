@@ -250,3 +250,13 @@ Self CUDA time total: 208.986us
 ```
 Overall we do fine, there's a slight difference of `4 microseconds` or `~2%`, we'll look into it at some point.
 
+## Day 13 Thread Coarsening
+Added Thread coarsened GEMM tiled version and tested it with a coarsening factor of 2 and 4.
+Observations:
+* Coarsening ended up affecting the performance adversely.
+* Hooked up pytorch profiler with TB and visualized the metrics.
+![Summary](day_13/images/summary.png)
+
+GPU Kernel breakdown
+![GPU Kernel Breakdown](day_13/images/gpu_kernel.png)
+
