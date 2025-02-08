@@ -255,8 +255,8 @@ Added Thread coarsened GEMM tiled version and tested it with a coarsening factor
 Observations:
 * Coarsening ended up affecting the performance adversely.
 * Hooked up pytorch profiler with TB and visualized the metrics.
-![Summary](day_13/images/summary.png)
+![Summary](./src/day_13/images/summary.png)
 
 GPU Kernel breakdown
-![GPU Kernel Breakdown](day_13/images/gpu_kernel.png)
+![GPU Kernel Breakdown](./src/day_13/images/gpu_kernel.png)
 
