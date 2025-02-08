@@ -10,11 +10,11 @@ import torch.utils.cpp_extension
 torch_include_paths = torch.utils.cpp_extension.include_paths()
 
 setup(
-    name="gemm_bench",
+    name="gemm_tiled_bench",
     ext_modules=[
         CUDAExtension(
-            "gemm_bench",
-            ["../day_12/gemm_bench.cu"],
+            "gemm_tiled_bench",
+            ["../day_13/gemm_tiled_bench.cu"],
             include_dirs=[cuda_include_path] + torch_include_paths,
             libraries=["cublas", "cublasLt"],
             extra_compile_args={
