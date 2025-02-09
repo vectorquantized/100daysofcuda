@@ -283,12 +283,12 @@ for(int stride = blockDim.x / 2 ; stride > 0; stride /= 2) {
 Once the block-wise sum is computed (each block reducing its portion of the array), the first thread (thread 0) performs an `atomicAdd` to update the global result. Finally, we validate our implementation by comparing it against PyTorch’s sum function.
 
 ## Day 15 Layer Norm
-Finally, get to code layernorm, all pieces for a transformer block (well, RMSNorm is similar inspirit) are coming together. We implement LayerNorm which expects a 2D input tensor of Shape: (N, D). The algorithm works as follows:
-Each row is operated on per block. The number of elements D 
+Finally, get to code `LayerNorm`, all pieces for a `Transformer` block (well, `RMSNorm` is similar inspirit) are coming together. We implement LayerNorm which expects a `2D` input tensor of `Shape: (N, D)`. The algorithm works as follows:
+Each row is operated on per block. The number of elements `D` 
 could be larger than the block size or the number of threads in a block
 so naturally, each thread operates on multiple elements to calculate the mean and variance.
-We go strided, start with idx = threadIdx.x (of current thread) and go until we can (idx < D)
-with a stride of blockDim.x
+We go strided, start with `idx = threadIdx.x` (of current thread) and go until we can (idx < D)
+with a stride of `blockDim.x`
 
 We need to fetch the row for a block, the indexing for input and output is the same.
 ```cpp
