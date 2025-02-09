@@ -282,3 +282,52 @@ for(int stride = blockDim.x / 2 ; stride > 0; stride /= 2) {
 ```
 Once the block-wise sum is computed (each block reducing its portion of the array), the first thread (thread 0) performs an `atomicAdd` to update the global result. Finally, we validate our implementation by comparing it against PyTorch’s sum function.
 
+## Day 15 Layer Norm
+Finally, get to code layernorm, all pieces for a transformer block (well, RMSNorm is similar inspirit) are coming together. We implement LayerNorm which expects a 2D input tensor of Shape: (N, D). The algorithm works as follows:
+Each row is operated on per block. The number of elements D 
+could be larger than the block size or the number of threads in a block
+so naturally, each thread operates on multiple elements to calculate the mean and variance.
+We go strided, start with idx = threadIdx.x (of current thread) and go until we can (idx < D)
+with a stride of blockDim.x
+
+We need to fetch the row for a block, the indexing for input and output is the same.
+```cpp
+block_input = input + blockIdx.x * D;
+block_output = input + blockIdx.x * D;
+```
+We fetch `x = block_input[idx]` and add it to sum and sum_squared.
+
+We then in shared memory add the work done by each thread.
+After a barrier sync, we do parallel reduction using a strided pattern we saw before.
+Thread 0 of each block is responsible for calculating the final mean and inverse std dev
+for a row.
+
+Then we do the layer norm op:
+```cpp
+norm = (x - mean) * inv_std;
+output = norm * gamma[idx] + beta[idx].
+```
+We will allocate `gammas`, `betas` and `output` on kernel launch.
+
+PyTorch run:
+```
+(cuda) ➜  day_15 git:(main) ✗ python profile_ln.py         
+Results match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                       torch layer norm         2.46%     106.083us        38.01%       1.637ms       1.637ms       0.000us         0.00%     321.083us     321.083us           0 b           0 b      32.00 Mb           0 b             1  
+                                       aten::layer_norm         0.47%      20.171us        29.76%       1.281ms       1.281ms       0.000us         0.00%     321.083us     321.083us           0 b           0 b      32.00 Mb      -8.00 Kb             1  
+                                aten::native_layer_norm         1.75%      75.482us        29.29%       1.261ms       1.261ms     321.083us        50.94%     321.083us     321.083us           0 b           0 b      32.01 Mb           0 b             1  
+void at::native::(anonymous namespace)::vectorized_l...         0.00%       0.000us         0.00%       0.000us       0.000us     321.083us        50.94%     321.083us     321.083us           0 b           0 b           0 b           0 b             1  
+                                       torch layer norm         0.00%       0.000us         0.00%       0.000us       0.000us     321.083us        50.94%     321.083us     321.083us           0 b           0 b           0 b           0 b             1  
+void layer_norm<float>(float const*, float*, float c...         0.00%       0.000us         0.00%       0.000us       0.000us     309.242us        49.06%     309.242us     309.242us           0 b           0 b           0 b           0 b             1  
+                                      custom_layer norm         0.00%       0.000us         0.00%       0.000us       0.000us     309.242us        49.06%     309.242us     309.242us           0 b           0 b           0 b           0 b             1  
+                                      custom_layer norm         7.38%     317.671us        61.95%       2.667ms       2.667ms       0.000us         0.00%       0.000us       0.000us           0 b           0 b      32.00 Mb           0 b             1  
+                                       aten::empty_like         0.75%      32.211us        44.82%       1.930ms       1.930ms       0.000us         0.00%       0.000us       0.000us           0 b           0 b      32.00 Mb           0 b             1  
+                                    aten::empty_strided        39.77%       1.712ms        44.07%       1.898ms       1.898ms       0.000us         0.00%       0.000us       0.000us           0 b           0 b      32.00 Mb      32.00 Mb             1  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 4.305ms
+Self CUDA time total: 630.325us
+```
+
