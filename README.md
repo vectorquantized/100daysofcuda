@@ -260,3 +260,25 @@ Observations:
 GPU Kernel breakdown
 ![GPU Kernel Breakdown](./src/day_13/images/gpu_kernel.png)
 
+# Day 14 Atomic sum
+We code 1D atomic sum today. I have to travel, so we'll keep things simple (but not too simple!).
+In 1D Add we are exercising reduction pattern but we do it in an optimized way. 
+We write a strided for loop and Within a block we're summing the elements that are stride distance away. The way to construct strides governs if we'll be able to minimize thread divergence or not. So, in out code we do the following:
+```cpp
+for(int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+    ...
+}
+```
+Here first thing to note is that we're starting at `blockDim.x / 2` location. So, half of the threads will be inactive as each thread adds up two elements that are stride distance away. Thread `0` will sum element at index `0` and at index `blockDim.x / 2`. This way of adding elements results in less thread divergence (which only shows up when stride becomes less than the warp size) and for most part (only in the final iteration when computation load is smaller we see some divergence) all threads in a warp follow same execution path).
+
+After the first loop has ended:
+```cpp
+for(int stride = blockDim.x / 2 ; stride > 0; stride /= 2) {
+        if (tx < stride ) {
+            smem[tx] += smem[tx + stride];
+        }
+        __syncthreads();
+}
+```
+Once the block-wise sum is computed (each block reducing its portion of the array), the first thread (thread 0) performs an `atomicAdd` to update the global result. Finally, we validate our implementation by comparing it against PyTorch’s sum function.
+

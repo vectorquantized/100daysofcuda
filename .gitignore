@@ -36,3 +36,14 @@ build/
 *.exe
 *.out
 *.app
+
+# Ignore build artifacts
+build/
+dist/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore Python egg info
+*.egg-info/
