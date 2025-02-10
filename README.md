@@ -330,4 +330,31 @@ void layer_norm<float>(float const*, float*, float c...         0.00%       0.00
 Self CPU time total: 4.305ms
 Self CUDA time total: 630.325us
 ```
+## Day 16 Layer Norm with normalized shape
+Today we make the layernorm as similar as possible to PyTorch, not only in terms of performance but also in the API and usage. We now accept normalized_shape as a parameter which matches the shape of gamma and beta.
 
+### Example
+For a tensor of shape: `(B, L, D)`, the `normalized shape` could be `(L, D)`, which would mean we also make `gamma` and `beta` of the same shape.
+The mean and variance are then calcuated for `(L, D)` and applied to each Sequence. This is different though from a normal Transformer Block but the lfexibility of the kernel allows for arbitrary `normalized_shapes` (usually trailling dimensions).
+
+### Runtime
+```
+(cuda) ➜  day_16 git:(main) ✗ python profile_ln.py
+Results match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                       torch layer norm         0.91%     382.539us        55.55%      23.348ms      23.348ms       0.000us         0.00%      19.584ms      19.584ms           0 b           0 b       1.00 Gb           0 b             1  
+                                       aten::layer_norm         0.05%      22.350us         8.40%       3.531ms       3.531ms       0.000us         0.00%      19.584ms      19.584ms           0 b           0 b       1.00 Gb      -1.00 Kb             1  
+                                aten::native_layer_norm         4.75%       1.998ms         8.35%       3.509ms       3.509ms      19.584ms        51.78%      19.584ms      19.584ms           0 b           0 b       1.00 Gb           0 b             1  
+void at::native::(anonymous namespace)::vectorized_l...         0.00%       0.000us         0.00%       0.000us       0.000us      19.584ms        51.78%      19.584ms      19.584ms           0 b           0 b           0 b           0 b             1  
+                                       torch layer norm         0.00%       0.000us         0.00%       0.000us       0.000us      19.584ms        51.78%      19.584ms      19.584ms           0 b           0 b           0 b           0 b             1  
+void layer_norm<float>(float const*, float*, float c...         0.00%       0.000us         0.00%       0.000us       0.000us      18.236ms        48.22%      18.236ms      18.236ms           0 b           0 b           0 b           0 b             1  
+                                      custom_layer norm         0.00%       0.000us         0.00%       0.000us       0.000us      18.236ms        48.22%      18.236ms      18.236ms           0 b           0 b           0 b           0 b             1  
+                                            aten::empty         0.11%      46.892us         0.98%     412.220us     137.407us       0.000us         0.00%       0.000us       0.000us           0 b           0 b       1.00 Gb       1.00 Gb             3  
+                                  cudaStreamIsCapturing         0.01%       3.640us         0.01%       3.640us       1.213us       0.000us         0.00%       0.000us       0.000us           0 b           0 b           0 b           0 b             3  
+                                             cudaMalloc         1.37%     575.742us         1.37%     575.742us     191.914us       0.000us         0.00%       0.000us       0.000us           0 b           0 b           0 b           0 b             3  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 42.027ms
+Self CUDA time total: 37.820ms
+```

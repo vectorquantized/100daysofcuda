@@ -9,18 +9,18 @@ __global__ void layer_norm(const T* __restrict__ input,
                       T* __restrict__ output, 
                       const T* __restrict__ gamma, 
                       const T* __restrict__ beta,
-                      int D, T eps) {
+                      int num_features, T eps) {
 
     /*Here we do the following:
-    Each row is operated on per block. The number of elements D 
+    Each row is operated on per block. The number of elements num_features 
     could be larger than the block size or the number of threads in a block
     so naturally, each thread operates on multiple elements to calculate the mean and variance.
-    We go strided, start with idx = threadIdx.x (of current thread) and go until we can (idx < D)
+    We go strided, start with idx = threadIdx.x (of current thread) and go until we can (idx < num_features)
     with a stride of blockDim.x
 
     We need to fetch the row for a block, the indexing for input and output is the same.
-    block_input = input + blockIdx.x * D;
-    block_output = input + blockIdx.x * D;
+    block_input = input + blockIdx.x * num_features;
+    block_output = input + blockIdx.x * num_features;
     We fetch x = block_input[idx] and add it to sum and sum_squared.
 
     We then in shared memory add the work done by each thread.
@@ -33,21 +33,21 @@ __global__ void layer_norm(const T* __restrict__ input,
     output = norm * gamma[idx] + beta[idx].
 
     We will allocate gammas, betas and output on kernel launch.
-    
+
     */ 
 
 
     int block = blockIdx.x;
     int tx = threadIdx.x;
 
-    const T* block_input = input + block * D;
-    T* block_output = output + block * D;
+    const T* block_input = input + block * num_features;
+    T* block_output = output + block * num_features;
 
     T sum = static_cast<T>(0);
     T sum_squared = static_cast<T>(0);
 
     // strided loop
-    for(int i = tx; i < D; i+= blockDim.x) {
+    for(int i = tx; i < num_features; i+= blockDim.x) {
         T x = block_input[i];
         sum += x;
         sum_squared += x * x;
@@ -68,8 +68,8 @@ __global__ void layer_norm(const T* __restrict__ input,
         __syncthreads();
     }
 
-    T mean = smem_sum[0] / D;
-    T var = smem_sum_squared[0] / D - mean * mean;
+    T mean = smem_sum[0] / num_features;
+    T var = smem_sum_squared[0] / num_features - mean * mean;
 
     T inv_std = rsqrtf(var + eps);
 
@@ -82,7 +82,7 @@ __global__ void layer_norm(const T* __restrict__ input,
     mean = smem_mean;
     inv_std = smem_inv_std;
 
-    for(int i = tx; i < D; i += blockDim.x) {
+    for(int i = tx; i < num_features; i += blockDim.x) {
         T x = block_input[i];
         T norm = (x - mean) * inv_std;
         block_output[i] = norm * gamma[i] + beta[i];
