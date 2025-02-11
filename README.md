@@ -260,7 +260,7 @@ Observations:
 GPU Kernel breakdown
 ![GPU Kernel Breakdown](./src/day_13/images/gpu_kernel.png)
 
-# Day 14 Atomic sum
+## Day 14 Atomic sum
 We code 1D atomic sum today. I have to travel, so we'll keep things simple (but not too simple!).
 In 1D Add we are exercising reduction pattern but we do it in an optimized way. 
 We write a strided for loop and Within a block we're summing the elements that are stride distance away. The way to construct strides governs if we'll be able to minimize thread divergence or not. So, in out code we do the following:
@@ -358,3 +358,6 @@ void layer_norm<float>(float const*, float*, float c...         0.00%       0.00
 Self CPU time total: 42.027ms
 Self CUDA time total: 37.820ms
 ```
+## Day 17 convolution
+Batched convolution for a 4D tensor shaped: `(B, C, H, W)`
+I will post a detailed analysis tomorrow.
