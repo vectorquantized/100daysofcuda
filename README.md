@@ -361,3 +361,6 @@ Self CUDA time total: 37.820ms
 ## Day 17 convolution
 Batched convolution for a 4D tensor shaped: `(B, C, H, W)`
 I will post a detailed analysis tomorrow.
+
+## Day 18
+Debugging Report [here](https://github.com/vectorquantized/100daysofcuda/blob/main/src/day_18/debugging.md)
