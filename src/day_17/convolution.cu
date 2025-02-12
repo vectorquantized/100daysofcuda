@@ -20,7 +20,7 @@ torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel) 
     int channels = input.size(1);
     int M = input.size(2);
     int N = input.size(3);
-    int filter_size = kernel.size(1); // assumed a square kernel.
+    int filter_size = kernel.size(1);
     int filter_radius = (filter_size  - 1) / 2;
 
     int out_rows = M - 2 * filter_radius;
@@ -36,8 +36,8 @@ torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel) 
     );
     
     conv2D<float><<<grid_dim, block_dim>>>(input.data_ptr<float>(), 
-                                           kernel.data_ptr<float>(), output.data_ptr<float>(), 
-                                           batch_size, channels, out_rows, out_cols, filter_radius);
+                                       kernel.data_ptr<float>(), output.data_ptr<float>(), 
+                                       filter_radius, batch_size, channels, M, N);
     CUDA_ERROR_CHECK(cudaDeviceSynchronize());
     return output;
 }
