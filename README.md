@@ -364,3 +364,28 @@ I will post a detailed analysis tomorrow.
 
 ## Day 18
 Debugging Report [here](https://github.com/vectorquantized/100daysofcuda/blob/main/src/day_18/debugging.md)
+
+## Day 19
+We're taking a break from conv2D today and adding AB^T fused version to build up to flash attention forward.
+Here are the profiling results:
+```
+(cuda) ➜  day_19 git:(main) ✗ python profile_gemm_bench.py
+Matrices match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  Total MFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                             custom_bmm_transpose_fused         0.00%       0.000us         0.00%       0.000us       0.000us     808.497us       100.58%     808.497us     808.497us           0 b           0 b           0 b           0 b             1            --  
+void batched_gemm_tiled_ABT<float, 16, float>(float ...         0.00%       0.000us         0.00%       0.000us       0.000us     695.123us        86.48%     695.123us     695.123us           0 b           0 b           0 b           0 b             1            --  
+                                    torch_bmm_transpose         0.44%     279.689us        86.33%      54.883ms      54.883ms       0.000us         0.00%     104.446us     104.446us           0 b           0 b      10.12 Mb           0 b             1            --  
+                                              aten::bmm        65.27%      41.491ms        85.81%      54.550ms      54.550ms     104.446us        12.99%     104.446us     104.446us           0 b           0 b      10.12 Mb      10.12 Mb             1       536.871  
+                                ampere_sgemm_128x128_tn         0.00%       0.000us         0.00%       0.000us       0.000us     104.446us        12.99%     104.446us     104.446us           0 b           0 b           0 b           0 b             1            --  
+                                    torch_bmm_transpose         0.00%       0.000us         0.00%       0.000us       0.000us     104.446us        12.99%     104.446us     104.446us           0 b           0 b           0 b           0 b             1            --  
+                             custom_bmm_transpose_fused         0.56%     355.660us        13.66%       8.686ms       8.686ms       0.000us         0.00%       4.256us       4.256us           0 b           0 b       2.00 Mb           0 b             1            --  
+                                            aten::zeros         0.09%      56.252us        12.04%       7.654ms       7.654ms       0.000us         0.00%       4.256us       4.256us           0 b           0 b       2.00 Mb           0 b             1            --  
+                                            aten::zero_         0.04%      27.590us         9.21%       5.856ms       5.856ms       0.000us         0.00%       4.256us       4.256us           0 b           0 b           0 b           0 b             1            --  
+                                            aten::fill_         0.04%      24.461us         9.17%       5.828ms       5.828ms       4.256us         0.53%       4.256us       4.256us           0 b           0 b           0 b           0 b             1            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 63.571ms
+Self CUDA time total: 803.825us
+```
+Notice how PyTorch does a quick view transform for transpose on CPU, that's pretty clever! The fused kernel is of course 8x slower because we established before that PyTorch highly optimized and is using CUBLAS underneath. 
