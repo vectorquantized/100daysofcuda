@@ -388,4 +388,4 @@ void batched_gemm_tiled_ABT<float, 16, float>(float ...         0.00%       0.00
 Self CPU time total: 63.571ms
 Self CUDA time total: 803.825us
 ```
-Notice how PyTorch does a quick view transform for transpose on CPU, that's pretty clever! The fused kernel is of course 8x slower because we established before that PyTorch highly optimized and is using CUBLAS underneath. 
+Notice how PyTorch does a quick view transform for transpose on CPU, that's pretty clever! The fused kernel is of course 8x slower (although we previouly noted it to be 5x slower on Day 11) because we established before that PyTorch highly optimized and is using CUBLAS underneath.
