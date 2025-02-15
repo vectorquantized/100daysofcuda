@@ -9,11 +9,9 @@ writer = SummaryWriter(log_dir)
 
 batch_size, L, D = 8, 256, 512
 scale = 1.0
-multiplier = 3.5
+multiplier = 1.0
 
 A = torch.randn(batch_size, L, D, device="cuda", dtype=torch.float32)
-B = torch.randn(batch_size, L, D, device="cuda", dtype=torch.float32)
-
 
 @dataclass(kw_only=True)
 class FeedForwardConfig:
@@ -54,6 +52,8 @@ class SwigLU(nn.Module):
         return x
 
 cfg = FeedForwardConfig(input_dim=D, multiplier = multiplier)
+torch_swiglu = SwigLU(cfg)
+print(f"{torch_swiglu=}")
 
 with torch.profiler.profile(
     activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
@@ -65,11 +65,11 @@ with torch.profiler.profile(
 ) as prof:
 
     with torch.profiler.record_function("custom_swiglu"):
-        C_custom = swiglu.forward(A, B, scale)
+        C_custom = swiglu.forward()
         torch.cuda.synchronize()
 
     with torch.profiler.record_function("torch_swiglu"):
-        C_ref = SwigLU(cfg)(A)
+        C_ref = torch_swiglu(A)
         torch.cuda.synchronize()
 
 print(f"Matrices match: {torch.allclose(C_custom, C_ref,rtol=1e-3, atol=1e-3)}")
