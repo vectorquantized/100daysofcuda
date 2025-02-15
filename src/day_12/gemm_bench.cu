@@ -3,6 +3,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cublasLt.h>
+#include "../cuda/cublas_gemm.h"
 
 torch::Tensor batched_gemm_forward(torch::Tensor A, torch::Tensor B, float scale) {
     TORCH_CHECK(A.device().is_cuda(), "A must be a CUDA tensor");
@@ -19,109 +20,9 @@ torch::Tensor batched_gemm_forward(torch::Tensor A, torch::Tensor B, float scale
     int N = B.size(2);
 
     auto C = torch::zeros({batch_size, M, N}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
-
-    // Leading dimensions and strides
-    int64_t lda = K;
-    int64_t ldb = N;
-    int64_t ldc = N;
-    int64_t stridea = M * K;
-    int64_t strideb = K * N;
-    int64_t stridec = M * N;
-
-    // Create cuBLASLt handle
-    cublasLtHandle_t ltHandle;
-    cublasLtCreate(&ltHandle);
-
-    // Create Matmul Descriptor
-    cublasLtMatmulDesc_t operationDesc;
-    cublasLtMatmulDescCreate(&operationDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F);
-    cublasOperation_t transA = CUBLAS_OP_N, transB = CUBLAS_OP_N;
-    cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transA, sizeof(transA));
-    cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transB, sizeof(transB));
-
-    // Create Matrix Layouts
-    cublasLtMatrixLayout_t Adesc, Bdesc, Cdesc;
-    cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, M, K, lda);
-    cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, K, N, ldb);
-    cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, M, N, ldc);
-
-    // Set the matrix order to row-major for each descriptor
-    int32_t order = CUBLASLT_ORDER_ROW;
-    cublasLtMatrixLayoutSetAttribute(Adesc, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order));
-    cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order));
-    cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order));
-
-    // Set Batch Attributes
-    cublasLtMatrixLayoutSetAttribute(Adesc, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batch_size, sizeof(batch_size));
-    cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batch_size, sizeof(batch_size));
-    cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT, &batch_size, sizeof(batch_size));
-
-    cublasLtMatrixLayoutSetAttribute(Adesc, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stridea, sizeof(stridea));
-    cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &strideb, sizeof(strideb));
-    cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET, &stridec, sizeof(stridec));
-
-    size_t workspace_size = 1 * 1024 * 1024;
-    void* workspace;
-    cudaMalloc(&workspace, workspace_size);
-
-    cublasLtMatmulPreference_t preference;
-    cublasLtMatmulPreferenceCreate(&preference);
-    cublasLtMatmulPreferenceSetAttribute(
-        preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, 
-        &workspace_size, sizeof(workspace_size));
-
-    cublasLtMatmulHeuristicResult_t heuristicResult[1]; 
-    int returnedResults = 0;
-    cublasStatus_t status = cublasLtMatmulAlgoGetHeuristic(
-        ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 
-        1, 
-        heuristicResult, &returnedResults);
-
-    if (status != CUBLAS_STATUS_SUCCESS || returnedResults == 0) {
-        std::cerr << "No suitable cuBLASLt algorithm found!\n";
-        return torch::empty({}); 
-    }
-
-   
-    float alpha = 1.0f;
-    float beta = 0.0f;
-
-    
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-
-    cublasLtMatmul(
-        ltHandle,
-        operationDesc,
-        &alpha,
-        A.data_ptr<float>(), // A matrix
-        Adesc,
-        B.data_ptr<float>(), // B matrix
-        Bdesc,
-        &beta,
-        C.data_ptr<float>(), // C matrix (input)
-        Cdesc,
-        C.data_ptr<float>(), // C matrix (output)
-        Cdesc,
-        &heuristicResult[0].algo,
-        workspace,
-        workspace_size,
-        stream);
-
-   
-    cudaStreamSynchronize(stream);
-
-
-    cublasLtMatmulPreferenceDestroy(preference);
-    cublasLtMatrixLayoutDestroy(Adesc);
-    cublasLtMatrixLayoutDestroy(Bdesc);
-    cublasLtMatrixLayoutDestroy(Cdesc);
-    cublasLtMatmulDescDestroy(operationDesc);
-    cublasLtDestroy(ltHandle);
-    cudaFree(workspace);
-    cudaStreamDestroy(stream);
-
+    cublas_lt_matmul<float>(A.data_ptr<float>(), B.data_ptr<float>(), C.data_ptr<float>(), batch_size, M, K, N);
     return C;
+
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

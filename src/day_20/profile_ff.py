@@ -1,15 +1,15 @@
 import torch
-import swiglu
+import feed_forward
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-log_dir = "./logs/swiglu_profiling"
+log_dir = "./logs/ff_profiling"
 writer = SummaryWriter(log_dir)
 
-batch_size, L, D = 8, 256, 512
+batch_size, L, D = 32, 32, 256
 scale = 1.0
-multiplier = 1.0
+multiplier = 2
 
 A = torch.randn(batch_size, L, D, device="cuda", dtype=torch.float32)
 
@@ -52,25 +52,28 @@ class SwigLU(nn.Module):
         return x
 
 cfg = FeedForwardConfig(input_dim=D, multiplier = multiplier)
-torch_swiglu = SwigLU(cfg)
-print(f"{torch_swiglu=}")
+torch_feed_forward = SwigLU(cfg).to(A.device)
+print(f"{torch_feed_forward=}")
+with torch.inference_mode() as inf_mode:
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=True,
+        with_flops=True,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir)
+    ) as prof:
 
-with torch.profiler.profile(
-    activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-    record_shapes=True,
-    profile_memory=True,
-    with_stack=True,
-    with_flops=True,
-    on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir)
-) as prof:
+        with torch.profiler.record_function("custom_feed_forward"):
+            up = torch_feed_forward.up_proj
+            gate = torch_feed_forward.gate_proj
+            down = torch_feed_forward.down_proj
+            C_custom = feed_forward.forward(up.weight, gate.weight, down.weight, A)
+            torch.cuda.synchronize()
 
-    with torch.profiler.record_function("custom_swiglu"):
-        C_custom = swiglu.forward()
-        torch.cuda.synchronize()
-
-    with torch.profiler.record_function("torch_swiglu"):
-        C_ref = torch_swiglu(A)
-        torch.cuda.synchronize()
+        with torch.profiler.record_function("torch_feed_forward"):
+            C_ref = torch_feed_forward(A)
+            torch.cuda.synchronize()
 
 print(f"Matrices match: {torch.allclose(C_custom, C_ref,rtol=1e-3, atol=1e-3)}")
 

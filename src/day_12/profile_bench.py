@@ -26,4 +26,5 @@ with torch.profiler.profile(
     with torch.profiler.record_function("torch_bmm"):
         C_torch = torch.matmul(A, B)
 
+print(f"Matrices match: {torch.allclose(C_custom, C_torch,rtol=1e-3, atol=1e-3)}")
 print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
