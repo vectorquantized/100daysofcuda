@@ -1,5 +1,5 @@
 import torch
-import gemm_tiled_bench
+import gemm_tiled_fused
 from torch.utils.tensorboard import SummaryWriter
 
 log_dir = "./logs/gemm_profiling"
@@ -21,7 +21,7 @@ with torch.profiler.profile(
 ) as prof:
 
     with torch.profiler.record_function("custom_bmm_transpose_fused"):
-        C_custom = gemm_tiled_bench.bmm(A, B, scale)
+        C_custom = gemm_tiled_fused.bmm(A, B, scale)
         torch.cuda.synchronize()
 
     with torch.profiler.record_function("torch_bmm_transpose"):

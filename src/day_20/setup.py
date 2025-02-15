@@ -10,11 +10,11 @@ import torch.utils.cpp_extension
 torch_include_paths = torch.utils.cpp_extension.include_paths()
 
 setup(
-    name="gemm_tiled_fused",
+    name="swiglu",
     ext_modules=[
         CUDAExtension(
-            "gemm_tiled_fused",
-            ["../day_19/gemm_tiled_fused.cu"],
+            "swiglu",
+            ["../day_20/swiglu.cu"],
             include_dirs=[cuda_include_path] + torch_include_paths,
             libraries=["cublas", "cublasLt"],
             extra_compile_args={
