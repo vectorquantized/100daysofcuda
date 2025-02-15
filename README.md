@@ -391,4 +391,5 @@ Self CUDA time total: 803.825us
 Notice how PyTorch does a quick view transform for transpose on CPU, that's pretty clever! The fused kernel is of course 8x slower (although we previouly noted it to be 5x slower on Day 11) because we established before that PyTorch highly optimized and is using CUBLAS underneath.
 
 ## Day 20
-Ww're doing SwigLU today. Detailed analysis loading...
+We're doing FeedFoward today. Detailed analysis loading...
+Right now the kernel only succeeds for smaller inputs, so may be we need to work on the launch configuration
