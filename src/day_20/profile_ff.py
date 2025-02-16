@@ -7,9 +7,8 @@ from dataclasses import dataclass, field
 log_dir = "./logs/ff_profiling"
 writer = SummaryWriter(log_dir)
 
-batch_size, L, D = 32, 32, 256
-scale = 1.0
-multiplier = 2
+batch_size, L, D = 8, 512, 512
+multiplier = 3.5
 
 A = torch.randn(batch_size, L, D, device="cuda", dtype=torch.float32)
 
@@ -53,6 +52,9 @@ class SwigLU(nn.Module):
 
 cfg = FeedForwardConfig(input_dim=D, multiplier = multiplier)
 torch_feed_forward = SwigLU(cfg).to(A.device)
+up = torch_feed_forward.up_proj.weight.t().contiguous()
+gate = torch_feed_forward.gate_proj.weight.t().contiguous()
+down = torch_feed_forward.down_proj.weight.t().contiguous()
 print(f"{torch_feed_forward=}")
 with torch.inference_mode() as inf_mode:
     with torch.profiler.profile(
@@ -65,10 +67,7 @@ with torch.inference_mode() as inf_mode:
     ) as prof:
 
         with torch.profiler.record_function("custom_feed_forward"):
-            up = torch_feed_forward.up_proj
-            gate = torch_feed_forward.gate_proj
-            down = torch_feed_forward.down_proj
-            C_custom = feed_forward.forward(up.weight, gate.weight, down.weight, A)
+            C_custom = feed_forward.forward(up, gate, down, A)
             torch.cuda.synchronize()
 
         with torch.profiler.record_function("torch_feed_forward"):
@@ -78,5 +77,4 @@ with torch.inference_mode() as inf_mode:
 print(f"Matrices match: {torch.allclose(C_custom, C_ref,rtol=1e-3, atol=1e-3)}")
 
 print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-
 writer.close()

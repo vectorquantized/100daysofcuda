@@ -19,7 +19,7 @@ setup(
             libraries=["cublas", "cublasLt"],
             extra_compile_args={
                 "cxx": [f"-I{cuda_include_path}"] + [f"-I{p}" for p in torch_include_paths],  # Pass to g++
-                "nvcc": [f"-I{cuda_include_path}"] + [f"-I{p}" for p in torch_include_paths] + ["-O3"]  # Pass to nvcc
+                "nvcc": [f"-I{cuda_include_path}"] + [f"-I{p}" for p in torch_include_paths] + ["-O3"] # Pass to nvcc
             }
         )
     ],

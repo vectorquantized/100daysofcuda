@@ -1,4 +1,4 @@
-#ifndef ACTICATIONS_H
+#ifndef ACTIVATIONS_H
 #define ACTIVATIONS_H
 
 #define TILE_WIDTH 16
@@ -8,31 +8,33 @@
 
 template<typename T>
 __device__ T sigmoid(T x) {
-    return static_cast<T>(1) / (static_cast<T>(1) + exp(-x));
+    return T(1) / (T(1) + exp(-x));
 }
 
 template<typename T>
 __global__ void swiglu(const T* __restrict__ up, 
-                        const T* __restrict__ gate, 
-                        T* __restrict__ output,
-                         int B, int L, int H) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if(idx < B * L * H) {
+            const T* __restrict__ gate, 
+            T*       __restrict__ output,
+            int B, int L, int H)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < B * L * H) 
+    {
+        // decode (b,l,h) from idx
+        int h   = idx % H;
+        int tmp = idx / H;
+        int l   = tmp % L;
+        int b   = tmp / L;
 
-        int row = idx % H;
-        int col = idx / H;
+        // base offset in [B,L,H]
+        int base_idx = b*(L*H) + l*H + h;
 
-        int b = row % L;
-        int l = row % L;
+        T x1 = up[base_idx];
+        T x2 = gate[base_idx];
+        
+        T silu = x2 * sigmoid(x2);
 
-        int base_idx = b * (L * H) + l * H;
-        T x1 = up[base_idx + col];
-        T x2 = gate[base_idx + H + col];
-
-        T silu = x2 * sigmoid<T>(x2);
-
-        output[base_idx + col] = x1 * silu;
-
+        output[base_idx] = x1*silu;
     }
 }
 

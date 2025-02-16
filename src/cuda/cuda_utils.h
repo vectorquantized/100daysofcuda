@@ -4,15 +4,25 @@
 
 #include <cuda_runtime.h>
 #include <iostream>  
-#include <iomanip>                                          
+#include <iomanip>
+
+#define CEIL_DIV(M, N) ((M + N - 1 ) / N)      
 
 #define CUDA_ERROR_CHECK(call)  { \
-    cudaError_t error = call; \
-    if (error != cudaSuccess) { \
-        fprintf(stderr, "CUDA error in file '%s' in line %i.%s \n", \
-                __FILE__, __LINE__, cudaGetErrorString(error)); \
+    call; \
+    cudaError_t err = cudaGetLastError(); \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA error after kernel launch in file '%s' at line %i: %s\n", \
+                __FILE__, __LINE__, cudaGetErrorString(err)); \
         exit(EXIT_FAILURE); \
-    }}
+    } \
+    err = cudaDeviceSynchronize(); \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA error on device synchronization in file '%s' at line %i: %s\n", \
+                __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(EXIT_FAILURE); \
+    } \
+}
 
 class CudaEventTimer {
 public:
