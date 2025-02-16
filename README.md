@@ -70,7 +70,7 @@ make day_3
 ./day_3
 ```
 
-### Day 5 Softmax Kernel
+### Day 4 Softmax Kernel
 Softmax basic kernel
 The basic kernel works and is correct. We don't need to profile it to come to a conclusion that it is slow, reading the kernel should lay out the memory access patterns.
 * Needs to be tiled. It is memory bound at this point, we're reading too much from HBM
