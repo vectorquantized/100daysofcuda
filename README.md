@@ -70,7 +70,7 @@ make day_3
 ./day_3
 ```
 
-## Day 5 Softmax Kernel
+### Day 5 Softmax Kernel
 Softmax basic kernel
 The basic kernel works and is correct. We don't need to profile it to come to a conclusion that it is slow, reading the kernel should lay out the memory access patterns.
 * Needs to be tiled. It is memory bound at this point, we're reading too much from HBM
@@ -79,20 +79,20 @@ The basic kernel works and is correct. We don't need to profile it to come to a 
 * Need to extend it to 3D Tensors of Shape: (B, L, D)
 
 
-## Day 5 Extending Softmax Kernel
+### Day 5 Extending Softmax Kernel
 Tiled version
 * Observed that numerical precision of basic kernel is better compared tiled version (possibly due to reductions in tiled version?)
 * Also observed minimal speed differences between the two kernels.
 * Lack of speed needs investigation and perhaps better test cases.
 
-## Day 6 Debugging Softmax Tiled Kernel
+### Day 6 Debugging Softmax Tiled Kernel
 * row sum and row max match the cpu version.
 * ~something is wrong with the way I am storing exp_vals. They don't match cpu softmax.~
     * No need to use exp_vals, will tackle this in may be the online version.  
 * ~also rescaling could be an issue.~
     * This is only valid for online version.
  
-## Day 7 Online Softmax
+### Day 7 Online Softmax
 This is very close to what is done in FlashAttention paper.
 But we'll build it step by step. 
 Few things to note: 
@@ -142,7 +142,7 @@ norm += exp(x[i] - max)
 ✅ Test Passed! CPU and GPU outputs match.
 ```
 
-## Day 8 Batched softmax
+### Day 8 Batched softmax
 We are still on softmax, one might wonder why softmax and why so much time on softmax. Softmax offers an opprtunity to go tiled, has reduction operations and has an online version. So far we've done tiled, online and naive. We wanted to do batched version to take a step closer to implementing self attention and flash attention. By introducing a batched dimension, we are able to see clear benefits of online softmax. In self attention, the input is of shape: (B, L, D) which we transform to (B, L, h, d) -> (B, h, L, d) -> scale(Q)K ->  Softmax(scale(Q)K). Softmax is usually applied on shape: (B, h, L, L). When B is higher and h is decently higher and L is large, we need online softmax. We've implemented this as:
 
 ```cpp
@@ -168,7 +168,7 @@ Mesuring performance characteristics of online vs offline softmax
 
 There's a difference of 44 ms between the two kernels, with online version faster than the offline one by ~44 ms or online version is 17.46% faster.
 
-## Day 9 Tensor Transpose using metadata
+### Day 9 Tensor Transpose using metadata
 Made a transpose function inspired by PyTorch to only change metadata. No data movement needed for now.
 transpose works both on host and device as both `__host__` and `__device__` have been added to the function signature.
 ```
@@ -183,7 +183,7 @@ Old Strides: 24 6 2 1
 New Shape: 4 2 2 3 
 New Strides: 6 24 1 2 
 ```
-## Day 10 Self Attention
+### Day 10 Self Attention
 Based on the previous work, utilized tiled matmul, transpose and batched online softmax to sticth together a self attention kernel.
 It is decent, but in order to test it, I'd have to make sure I build python extensions now, as testing gets harder in C++ land with these extensive kernels.
 
@@ -196,7 +196,7 @@ Some logical next steps for the next few days:
 
 It's best to iterate on the base kernels by virtue of self attention kernel.
 
-## Day 11 PyTorch Integration and Benchmarking
+### Day 11 PyTorch Integration and Benchmarking
 * Templatized the GEMM tiled kernel
 * Added batched version of GEMM tiled kernel
     * We pass in batch_size in the z dimension of the gridDim, it is accessible as blockDim.z
@@ -224,7 +224,7 @@ Self CUDA time total: 672.432us
 ```
 PyTorch uses CUBLASS and there are a ton of optimization we could perform in the GEMM kernel, right now it runs 5x slower. it won't reach the performance of PyTorch's BMM but the aim would be to bring it closer. Before that though, the full integrated self attention kernel needs to be run.
 
-## Day 12 Peak into CublasLt
+### Day 12 Peak into CublasLt
 * Benchmarked cublasLtMatmul against torch::bmm
 * cublasLtMatmul requires a very detailed setup and one needs to be thorough
 * Reason for picking this exercise was to see if there's anything special that PyTorch does for GEMM
@@ -250,7 +250,7 @@ Self CUDA time total: 208.986us
 ```
 Overall we do fine, there's a slight difference of `4 microseconds` or `~2%`, we'll look into it at some point.
 
-## Day 13 Thread Coarsening
+### Day 13 Thread Coarsening
 Added Thread coarsened GEMM tiled version and tested it with a coarsening factor of 2 and 4.
 Observations:
 * Coarsening ended up affecting the performance adversely.
@@ -260,7 +260,7 @@ Observations:
 GPU Kernel breakdown
 ![GPU Kernel Breakdown](./src/day_13/images/gpu_kernel.png)
 
-## Day 14 Atomic sum
+### Day 14 Atomic sum
 We code 1D atomic sum today. I have to travel, so we'll keep things simple (but not too simple!).
 In 1D Add we are exercising reduction pattern but we do it in an optimized way. 
 We write a strided for loop and Within a block we're summing the elements that are stride distance away. The way to construct strides governs if we'll be able to minimize thread divergence or not. So, in out code we do the following:
@@ -282,7 +282,7 @@ for(int stride = blockDim.x / 2 ; stride > 0; stride /= 2) {
 ```
 Once the block-wise sum is computed (each block reducing its portion of the array), the first thread (thread 0) performs an `atomicAdd` to update the global result. Finally, we validate our implementation by comparing it against PyTorch’s sum function.
 
-## Day 15 Layer Norm
+### Day 15 Layer Norm
 Finally, get to code `LayerNorm`, all pieces for a `Transformer` block (well, `RMSNorm` is similar inspirit) are coming together. We implement LayerNorm which expects a `2D` input tensor of `Shape: (N, D)`. The algorithm works as follows:
 Each row is operated on per block. The number of elements `D` 
 could be larger than the block size or the number of threads in a block
@@ -330,14 +330,14 @@ void layer_norm<float>(float const*, float*, float c...         0.00%       0.00
 Self CPU time total: 4.305ms
 Self CUDA time total: 630.325us
 ```
-## Day 16 Layer Norm with normalized shape
+### Day 16 Layer Norm with normalized shape
 Today we make the layernorm as similar as possible to PyTorch, not only in terms of performance but also in the API and usage. We now accept normalized_shape as a parameter which matches the shape of gamma and beta.
 
-### Example
+#### Example
 For a tensor of shape: `(B, L, D)`, the `normalized shape` could be `(L, D)`, which would mean we also make `gamma` and `beta` of the same shape.
 The mean and variance are then calcuated for `(L, D)` and applied to each Sequence. This is different though from a normal Transformer Block but the lfexibility of the kernel allows for arbitrary `normalized_shapes` (usually trailling dimensions).
 
-### Runtime
+#### Runtime
 ```
 (cuda) ➜  day_16 git:(main) ✗ python profile_ln.py
 Results match: True
@@ -358,14 +358,14 @@ void layer_norm<float>(float const*, float*, float c...         0.00%       0.00
 Self CPU time total: 42.027ms
 Self CUDA time total: 37.820ms
 ```
-## Day 17 convolution
+### Day 17 convolution
 Batched convolution for a 4D tensor shaped: `(B, C, H, W)`
 I will post a detailed analysis tomorrow.
 
-## Day 18
+### Day 18
 Debugging Report [here](https://github.com/vectorquantized/100daysofcuda/blob/main/src/day_18/debugging.md)
 
-## Day 19
+### Day 19
 We're taking a break from conv2D today and adding AB^T fused version to build up to flash attention forward.
 Here are the profiling results:
 ```
@@ -390,6 +390,9 @@ Self CUDA time total: 803.825us
 ```
 Notice how PyTorch does a quick view transform for transpose on CPU, that's pretty clever! The fused kernel is of course 8x slower (although we previouly noted it to be 5x slower on Day 11) because we established before that PyTorch highly optimized and is using CUBLAS underneath.
 
-## Day 20
+### Day 20
 We're doing FeedFoward today. Detailed analysis loading...
 Right now the kernel only succeeds for smaller inputs, so may be we need to work on the launch configuration
+
+### Day 21
+FeedForward [Kernel](https://github.com/vectorquantized/100daysofcuda/blob/main/src/day_21/feed_forward.md)
