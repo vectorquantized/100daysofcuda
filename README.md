@@ -396,3 +396,50 @@ Right now the kernel only succeeds for smaller inputs, so may be we need to work
 
 ### Day 21
 FeedForward [Kernel](https://github.com/vectorquantized/100daysofcuda/blob/main/src/day_21/feed_forward.md)
+
+### Day 22
+We used CublasLtMatmul instead of bmm_broadcast_B implementation in feedfoward context. Below are the profiling results after warmup:
+
+#### bmm_broadcast_B
+```
+Matrices match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  Total MFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                    custom_feed_forward         0.00%       0.000us         0.00%       0.000us       0.000us        1.361s        87.36%        1.361s        1.361s           0 b           0 b           0 b           0 b             1            --  
+void bmm_broadcast_B<float, 16, float>(float const*,...         0.00%       0.000us         0.00%       0.000us       0.000us        1.355s        87.03%        1.355s     451.802ms           0 b           0 b           0 b           0 b             3            --  
+                                     torch_feed_forward         0.00%       0.000us         0.00%       0.000us       0.000us     197.783ms        12.70%     197.783ms     197.783ms           0 b           0 b           0 b           0 b             1            --  
+                                     torch_feed_forward         0.03%     433.985us        12.69%     198.261ms     198.261ms       0.000us         0.00%     197.779ms     197.779ms           0 b           0 b     128.00 Mb      -1.75 Gb             1            --  
+                                           aten::linear         0.00%      20.745us         0.03%     435.365us     145.122us       0.000us         0.00%     194.358ms      64.786ms           0 b           0 b       1.00 Gb           0 b             3            --  
+                                           aten::matmul         0.00%      64.237us         0.02%     357.437us     119.146us       0.000us         0.00%     194.358ms      64.786ms           0 b           0 b       1.00 Gb           0 b             3            --  
+                                               aten::mm         0.01%     175.056us         0.02%     270.982us      90.327us     194.358ms        12.48%     194.358ms      64.786ms           0 b           0 b       1.00 Gb       1.00 Gb             3   2886218.023  
+                                ampere_sgemm_128x128_tn         0.00%       0.000us         0.00%       0.000us       0.000us     194.355ms        12.48%     194.355ms      64.785ms           0 b           0 b           0 b           0 b             3            --  
+                                    custom_feed_forward         0.07%       1.029ms        87.31%        1.364s        1.364s       0.000us         0.00%      67.387ms      67.387ms           0 b           0 b     128.00 Mb      -1.31 Gb             1            --  
+                                  cudaDeviceSynchronize        98.19%        1.534s        98.19%        1.534s     255.606ms      65.226ms         4.19%      65.226ms      10.871ms           0 b           0 b           0 b           0 b             6            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 1.562s
+Self CUDA time total: 1.557s
+```
+
+#### cublasLtMatmul
+```
+Matrices match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg       CPU Mem  Self CPU Mem      CUDA Mem  Self CUDA Mem    # of Calls  Total MFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                    custom_feed_forward         0.00%       0.000us         0.00%       0.000us       0.000us     328.142ms        83.34%     328.142ms     109.381ms           0 b           0 b           0 b           0 b             3            --  
+                                     torch_feed_forward         0.00%       0.000us         0.00%       0.000us       0.000us     196.282ms        49.85%     196.282ms     196.282ms           0 b           0 b           0 b           0 b             1            --  
+                                     torch_feed_forward         0.16%     638.828us        49.17%     196.902ms     196.902ms       0.000us         0.00%     196.277ms     196.277ms           0 b           0 b     128.00 Mb      -1.75 Gb             1            --  
+                                ampere_sgemm_128x128_nn         0.00%       0.000us         0.00%       0.000us       0.000us     193.221ms        49.07%     193.221ms      64.407ms           0 b           0 b           0 b           0 b             3            --  
+                                           aten::linear         0.01%      22.062us         0.10%     416.485us     138.828us       0.000us         0.00%     192.860ms      64.287ms           0 b           0 b       1.00 Gb           0 b             3            --  
+                                           aten::matmul         0.02%      66.117us         0.09%     343.592us     114.531us       0.000us         0.00%     192.860ms      64.287ms           0 b           0 b       1.00 Gb           0 b             3            --  
+                                               aten::mm         0.04%     173.065us         0.06%     255.991us      85.330us     192.860ms        48.98%     192.860ms      64.287ms           0 b           0 b       1.00 Gb       1.00 Gb             3   2886218.023  
+                                ampere_sgemm_128x128_tn         0.00%       0.000us         0.00%       0.000us       0.000us     192.858ms        48.98%     192.858ms      64.286ms           0 b           0 b           0 b           0 b             3            --  
+                                    custom_feed_forward         1.11%       4.453ms        50.82%     203.506ms     203.506ms       0.000us         0.00%       2.165ms       2.165ms           0 b           0 b     128.00 Mb      -1.31 Gb             1            --  
+                                            aten::zeros         0.02%      98.016us         0.35%       1.397ms     349.202us       0.000us         0.00%       2.165ms     541.344us           0 b           0 b       1.44 Gb           0 b             4            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 400.419ms
+Self CUDA time total: 393.756ms
+```
+
+🚀 The version with cublasLtMatmul is 75.88% faster than bmm_broadcast_B for larger matrices!

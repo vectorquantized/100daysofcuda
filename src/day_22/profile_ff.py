@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 log_dir = "./logs/ff_profiling"
 writer = SummaryWriter(log_dir)
 
-batch_size, L, D = 32, 1024, 4096
-multiplier = 4
+batch_size, L, D = 8, 1024, 4096
+multiplier = 3.5
 
 A = torch.randn(batch_size, L, D, device="cuda", dtype=torch.float32)
 
@@ -56,6 +56,11 @@ up = torch_feed_forward.up_proj.weight.t().contiguous()
 gate = torch_feed_forward.gate_proj.weight.t().contiguous()
 down = torch_feed_forward.down_proj.weight.t().contiguous()
 print(f"{torch_feed_forward=}")
+
+for _ in range(10):
+    _ = feed_forward.forward(up, gate, down, A)
+    _ = torch_feed_forward(A)
+
 with torch.inference_mode() as inf_mode:
     with torch.profiler.profile(
         activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
