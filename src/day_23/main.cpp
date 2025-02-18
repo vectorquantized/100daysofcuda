@@ -88,11 +88,6 @@ int main(int argc, char const **argv) {
   // Copy the result from device back to host.
   tensor_C.sync_host();
 
-  // (Optional) Verify correctness with a reference GEMM.
-  // For brevity, this step is omitted. You can use cutlass::reference::host::Gemm
-  // to compute a CPU reference and compare the results.
-
-  // Free workspace.
   if (workspace) {
     cudaFree(workspace);
   }
