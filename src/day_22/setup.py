@@ -10,11 +10,11 @@ import torch.utils.cpp_extension
 torch_include_paths = torch.utils.cpp_extension.include_paths()
 
 setup(
-    name="feed_forward",
+    name="feed_forward_cublas",
     ext_modules=[
         CUDAExtension(
-            "feed_forward",
-            ["../day_22/feed_forward.cu"],
+            "feed_forward_cublas",
+            ["../day_22/feed_forward_cublas.cu"],
             include_dirs=[cuda_include_path] + torch_include_paths,
             libraries=["cublas", "cublasLt"],
             extra_compile_args={

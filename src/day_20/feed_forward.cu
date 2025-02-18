@@ -37,11 +37,9 @@ torch::Tensor feed_forward(torch::Tensor up, torch::Tensor gate, torch::Tensor d
 
     auto up_proj = torch::zeros({B, L, H}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
     bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(A.data_ptr<float>(), up.data_ptr<float>(), up_proj.data_ptr<float>(), B, L, D, H, 1.0f);
-    // cublas_lt_matmul<float>(A.data_ptr<float>(), up.data_ptr<float>(), up_proj.data_ptr<float>(), B, L, D, H);
 
     auto gate_proj = torch::zeros({B, L, H}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
     bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(A.data_ptr<float>(), gate.data_ptr<float>(), gate_proj.data_ptr<float>(), B, L, D, H, 1.0f);
-    // cublas_lt_matmul<float>(A.data_ptr<float>(), gate.data_ptr<float>(), gate_proj.data_ptr<float>(), 1, B * L, D, H);
 
 
     int num_elements = B * L * H;
@@ -54,12 +52,8 @@ torch::Tensor feed_forward(torch::Tensor up, torch::Tensor gate, torch::Tensor d
                                            gate_proj.data_ptr<float>(),
                                            output.data_ptr<float>(),
                                            B, L, H);
-    // cudaError_t err = cudaGetLastError();
-    // TORCH_CHECK(err == cudaSuccess, "CUDA kernel failed : ", cudaGetErrorString(err));
-    // cudaDeviceSynchronize();
     
     auto down_proj = torch::zeros({B, L, D}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
-    // cublas_lt_matmul<float>(output.data_ptr<float>(), down.data_ptr<float>(), down_proj.data_ptr<float>(), 1, B*L, H, D);
     bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(output.data_ptr<float>(), down.data_ptr<float>(), down_proj.data_ptr<float>(), B, L, H, D, 1.0f);
     return down_proj;
 }

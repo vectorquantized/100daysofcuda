@@ -12,6 +12,8 @@ find_package(fmt REQUIRED)
 
 # Include directories for headers
 include_directories(${PROJECT_SOURCE_DIR}/src)
+find_package(CUDA REQUIRED)
+include_directories(${CUDA_INCLUDE_DIRS})
 
 # Collect common CPP and CPU sources
 file(GLOB CPP_SOURCES ${PROJECT_SOURCE_DIR}/src/csrc/*.cpp)
@@ -31,14 +33,26 @@ foreach(DAY_DIR ${DAY_DIRS})
     # Collect all .cu files in the current day_* directory
     file(GLOB CUDA_FILES ${DAY_DIR}/*.cu)
 
+    # Collect all .cu files in the current day_* directory
+    file(GLOB CPP_FILES ${DAY_DIR}/*.cpp)
+
     # Create a target for the current day directory
-    add_executable(${DAY_NAME} ${CUDA_FILES} ${CPP_SOURCES} ${CPU_SOURCES})
+    add_executable(${DAY_NAME} ${CUDA_FILES} ${CPP_FILES} ${CPP_SOURCES} ${CPU_SOURCES})
 
     # Set CUDA architectures
     set_target_properties(${DAY_NAME} PROPERTIES CUDA_ARCHITECTURES "80;86;89;90")
 
     # Add include directories
     target_include_directories(${DAY_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+
+    # Ensure CUTLASS_PATH is set (adjust the path as needed)
+    if(NOT DEFINED CUTLASS_PATH)
+        set(CUTLASS_PATH "/workspace/cuda/cutlass/")
+    endif()
+    target_include_directories(${DAY_NAME} PRIVATE 
+        ${CUTLASS_PATH}/include 
+        ${CUTLASS_PATH}/tools/util/include
+    )
 
     # Link fmt and OpenMP
     target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt)

@@ -1,5 +1,5 @@
 import torch
-import feed_forward
+import feed_forward_cublas as FFCB
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
 from dataclasses import dataclass, field
@@ -26,7 +26,7 @@ class FeedForwardConfig:
         self.output_dim = self.input_dim
 
 
-class SwigLU(nn.Module):
+class FeedForward(nn.Module):
     def __init__(self, cfg: FeedForwardConfig):
         super().__init__()
         self.gate_proj = nn.Linear(cfg.input_dim, cfg.hidden_dim, bias=False)
@@ -51,14 +51,14 @@ class SwigLU(nn.Module):
         return x
 
 cfg = FeedForwardConfig(input_dim=D, multiplier = multiplier)
-torch_feed_forward = SwigLU(cfg).to(A.device)
+torch_feed_forward = FeedForward(cfg).to(A.device)
 up = torch_feed_forward.up_proj.weight.t().contiguous()
 gate = torch_feed_forward.gate_proj.weight.t().contiguous()
 down = torch_feed_forward.down_proj.weight.t().contiguous()
 print(f"{torch_feed_forward=}")
 
 for _ in range(10):
-    _ = feed_forward.forward(up, gate, down, A)
+    _ = FFCB.forward(up, gate, down, A)
     _ = torch_feed_forward(A)
 
 with torch.inference_mode() as inf_mode:
@@ -71,15 +71,15 @@ with torch.inference_mode() as inf_mode:
         on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir)
     ) as prof:
 
-        with torch.profiler.record_function("custom_feed_forward"):
-            C_custom = feed_forward.forward(up, gate, down, A)
+        with torch.profiler.record_function("FFCB"):
+            C_custom = FFCB.forward(up, gate, down, A)
             torch.cuda.synchronize()
 
-        with torch.profiler.record_function("torch_feed_forward"):
+        with torch.profiler.record_function("PTFF"):
             C_ref = torch_feed_forward(A)
             torch.cuda.synchronize()
 
-print(f"Matrices match: {torch.allclose(C_custom, C_ref,rtol=1e-3, atol=1e-3)}")
+print(f"Matrices match: {torch.allclose(C_custom, C_ref,rtol=1e-3, atol=1e-5)}")
 
 print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 writer.close()

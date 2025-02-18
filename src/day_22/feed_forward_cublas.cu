@@ -52,21 +52,20 @@ torch::Tensor feed_forward(torch::Tensor up, torch::Tensor gate, torch::Tensor d
 
     cudaStream_t stream1, stream2;
     cudaStreamCreate(&stream1);
-    // cudaStreamCreate(&stream2);
+    cudaStreamCreate(&stream2);
 
     auto up_proj = torch::zeros({B, L, H}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
-    //bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(A.data_ptr<float>(), up.data_ptr<float>(), up_proj.data_ptr<float>(), B, L, D, H, 1.0f);
     cublas_lt_matmul_optimized<float>(A.data_ptr<float>(), up.data_ptr<float>(), up_proj.data_ptr<float>(), B, L, D, H, *g_cublasLtManager, stream1, 0);
 
     auto gate_proj = torch::zeros({B, L, H}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
-    //bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(A.data_ptr<float>(), gate.data_ptr<float>(), gate_proj.data_ptr<float>(), B, L, D, H, 1.0f);
     cublas_lt_matmul_optimized<float>(A.data_ptr<float>(), gate.data_ptr<float>(), gate_proj.data_ptr<float>(), B, L, D, H, *g_cublasLtManager, stream1, 0);
 
     cudaStreamSynchronize(stream1);
-    // cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
 
     cudaStreamDestroy(stream1);
-    // cudaStreamDestroy(stream2);
+    cudaStreamDestroy(stream2);
+    
     int num_elements = B * L * H;
     int block_size = TILE_WIDTH * TILE_WIDTH;
     dim3 block_dim(block_size);
@@ -77,14 +76,10 @@ torch::Tensor feed_forward(torch::Tensor up, torch::Tensor gate, torch::Tensor d
                                            gate_proj.data_ptr<float>(),
                                            output.data_ptr<float>(),
                                            B, L, H);
-    // cudaError_t err = cudaGetLastError();
-    // TORCH_CHECK(err == cudaSuccess, "CUDA kernel failed : ", cudaGetErrorString(err));
-    // cudaDeviceSynchronize();
     
     auto down_proj = torch::zeros({B, L, D}, torch::TensorOptions().device(A.device()).dtype(A.dtype()));
     cublas_lt_matmul_optimized<float>(output.data_ptr<float>(), down.data_ptr<float>(), down_proj.data_ptr<float>(), B, L, H, D, *g_cublasLtManager, nullptr, 0);
     cleanup_resources();
-    // bmm_broadcast_B_launcher<float, TILE_WIDTH, float>(output.data_ptr<float>(), down.data_ptr<float>(), down_proj.data_ptr<float>(), B, L, H, D, 1.0f);
     return down_proj;
 }
 
