@@ -26,4 +26,5 @@ for (int out_c = 0; out_c < out_channels; ++out_c) {
         const T* mask_channel = conv_mask + (out_c * in_channels + in_c) * filter_size * filter_size;
 ```
 
-Notice that for mask_channel we add (out_c * in_channels + in_c) * filter_size * filter_size
+Notice that for mask_channel we add `(out_c * in_channels + in_c) * filter_size * filter_size`. Why do we do this?
+Note that in PyTorch, the kernel is stored as: `(out_channels, in_channels, filter_height, filter_width)`. So we index the kernel as: `out_c * in_channels * filter_height * filter_width + in_c * filter_height * filter_width`
