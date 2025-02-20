@@ -1,6 +1,55 @@
 #ifndef CONVOLUTION_H
 #define CONVOLUTION_H
 
+#define TILE_WIDTH 16
+#define OUT_TILE_WIDTH 12
+#define SHARED_INDEX(row, col, in_tile_width) ((row) * in_tile_width + (col))
+
+template<typename T>
+__global__ void conv2d_tiled(const T* __restrict__ input, const T* __restrict__ kernel,
+                             T* __restrict__ output, int filter_size, int filter_radius, int batch_size,
+                             int width, int height, int out_width, int out_height) {
+
+    int row_out = blockIdx.y * OUT_TILE_WIDTH + threadIdx.y;
+    int col_out = blockIdx.x * OUT_TILE_WIDTH + threadIdx.x;
+
+    int batch_idx = blockIdx.z;
+
+    int row_in = row_out; // - filter_radius;
+    int col_in = col_out; // - filter_radius;
+
+    int in_tile_width = blockDim.x;
+    extern __shared__ T m_shared[];
+
+    const T* input_batch = input + batch_idx * height * width;
+    T* output_batch = output + batch_idx * out_height * out_width;
+
+    int row_shared = threadIdx.y;
+    int col_shared = threadIdx.x;
+
+    if (row_in >= 0 && row_in < height &&
+        col_in >= 0  && col_in < width) {
+            m_shared[SHARED_INDEX(row_shared, col_shared, in_tile_width)] = input_batch[row_in * width + col_in];
+    } else {
+            m_shared[SHARED_INDEX(row_shared, col_shared, in_tile_width)] = static_cast<T>(0);
+    }
+    
+    __syncthreads();
+
+    if(row_shared < OUT_TILE_WIDTH && col_shared < OUT_TILE_WIDTH) {
+        T p_value = static_cast<T>(0);
+        for(int i = 0; i < filter_size; ++i) {
+            for(int j = 0; j < filter_size; ++j) {
+                p_value += kernel[i * filter_size + j] * m_shared[SHARED_INDEX(row_shared + i, col_shared + j, in_tile_width)];
+            }
+        }
+        if (row_out < out_height && col_out < out_width) {
+            output_batch[row_out * out_width + col_out] = p_value;
+        }
+    }
+}
+
+
 template<typename T>
 __global__ void conv2D(const T* __restrict__ input,
                        const T* __restrict__ conv_mask,
@@ -11,6 +60,7 @@ __global__ void conv2D(const T* __restrict__ input,
     int row_out = blockIdx.y * blockDim.y + threadIdx.y;
     int col_out = blockIdx.x * blockDim.x + threadIdx.x;
     int batch_idx = blockIdx.z;
+
     int filter_size = 2 * filter_radius + 1;
     int out_height = height - 2 * filter_radius;
     int out_width = width - 2 * filter_radius;
@@ -33,11 +83,10 @@ __global__ void conv2D(const T* __restrict__ input,
                     }
                 }
             }
-
-            // Correct output indexing
             output[((batch_idx * out_channels + out_c) * out_height + row_out) * out_width + col_out] = p_value;
         }
     }
 }
+
 
 #endif // CONVOLUTION_H
