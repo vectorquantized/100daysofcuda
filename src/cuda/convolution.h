@@ -5,50 +5,76 @@
 #define OUT_TILE_WIDTH 12
 #define SHARED_INDEX(row, col, in_tile_width) ((row) * in_tile_width + (col))
 
+
 template<typename T>
 __global__ void conv2d_tiled(const T* __restrict__ input, const T* __restrict__ kernel,
-                             T* __restrict__ output, int filter_size, int filter_radius, int batch_size,
-                             int width, int height, int out_width, int out_height) {
+                            T* __restrict__ output, int filter_size, int filter_radius, 
+                            int batch_size, int in_channels, int height, int width, 
+                            int out_height, int out_width) {
 
+    // Calculate output position
     int row_out = blockIdx.y * OUT_TILE_WIDTH + threadIdx.y;
     int col_out = blockIdx.x * OUT_TILE_WIDTH + threadIdx.x;
-
     int batch_idx = blockIdx.z;
 
+    // Calculate input position with filter offset
     int row_in = row_out; // - filter_radius;
-    int col_in = col_out; // - filter_radius;
+    int col_in = col_out;// - filter_radius;
 
+    // Shared memory setup
     int in_tile_width = blockDim.x;
     extern __shared__ T m_shared[];
 
-    const T* input_batch = input + batch_idx * height * width;
+    // Calculate batch offsets
+    const T* input_batch = input + batch_idx * in_channels * height * width;
     T* output_batch = output + batch_idx * out_height * out_width;
 
-    int row_shared = threadIdx.y;
-    int col_shared = threadIdx.x;
+    // Initialize accumulator
+    T p_value = static_cast<T>(0);
 
-    if (row_in >= 0 && row_in < height &&
-        col_in >= 0  && col_in < width) {
-            m_shared[SHARED_INDEX(row_shared, col_shared, in_tile_width)] = input_batch[row_in * width + col_in];
-    } else {
-            m_shared[SHARED_INDEX(row_shared, col_shared, in_tile_width)] = static_cast<T>(0);
-    }
-    
-    __syncthreads();
+    int tile_origin_row = blockIdx.y * OUT_TILE_WIDTH;
+    int tile_origin_col = blockIdx.x * OUT_TILE_WIDTH;
+    int global_row = tile_origin_row + threadIdx.y;
+    int global_col = tile_origin_col + threadIdx.x;
 
-    if(row_shared < OUT_TILE_WIDTH && col_shared < OUT_TILE_WIDTH) {
-        T p_value = static_cast<T>(0);
-        for(int i = 0; i < filter_size; ++i) {
-            for(int j = 0; j < filter_size; ++j) {
-                p_value += kernel[i * filter_size + j] * m_shared[SHARED_INDEX(row_shared + i, col_shared + j, in_tile_width)];
+    // Process each input channel
+    for(int c = 0; c < in_channels; ++c) {
+        // Calculate channel offset in shared memory
+        int shared_offset = c * in_tile_width * in_tile_width;
+
+        // Load input to shared memory
+        if (global_row < height && global_col < width) {
+            m_shared[shared_offset + SHARED_INDEX(threadIdx.y, threadIdx.x, in_tile_width)] =
+                input_batch[c * height * width + global_row * width + global_col];
+        }
+        else {
+            m_shared[shared_offset + SHARED_INDEX(threadIdx.y, threadIdx.x, in_tile_width)] = static_cast<T>(0);
+        }
+        
+        __syncthreads();
+
+        // Compute convolution if thread is responsible for output pixel
+        if(threadIdx.y < OUT_TILE_WIDTH && threadIdx.x < OUT_TILE_WIDTH) {
+            int kernel_offset = c * filter_size * filter_size;
+            
+            #pragma unroll
+            for(int i = 0; i < filter_size; ++i) {
+                #pragma unroll
+                for(int j = 0; j < filter_size; ++j) {
+                    p_value += kernel[kernel_offset + i * filter_size + j] * 
+                              m_shared[shared_offset + SHARED_INDEX(threadIdx.y + i, threadIdx.x + j, in_tile_width)];
+                }
             }
         }
-        if (row_out < out_height && col_out < out_width) {
-            output_batch[row_out * out_width + col_out] = p_value;
-        }
+        
+        __syncthreads();
+    }
+
+    // Write output
+    if (row_out < out_height && col_out < out_width) {
+        output_batch[row_out * out_width + col_out] = p_value;
     }
 }
-
 
 template<typename T>
 __global__ void conv2D(const T* __restrict__ input,
