@@ -3,6 +3,6 @@
 
 #include <torch/extension.h>
 
-torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel);
+torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel, torch::Tensor output);
 
 #endif // BATCHED_CONV2D_H

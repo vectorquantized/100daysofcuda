@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
-import sigp as convolution
+import sigp_batched as convolution
 
-B, C_in, H, W = 1, 3, 16, 16
+B, C_in, H, W = 32, 3, 1024, 1024
 kernel_size = (3, 3)
 
 weight = torch.randn(C_in, *kernel_size, device="cuda", dtype=torch.float32)
@@ -32,11 +32,11 @@ with torch.profiler.profile(
 
 print(f"Results match: {torch.allclose(C_custom, C_ref)}")
 
-# print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
-print(f"{C_ref=}")
-print("*" * 80)
-print(f"{C_custom=}")
+# print(f"{C_ref=}")
+# print("*" * 80)
+# print(f"{C_custom=}")
 
 diff = (C_custom - C_ref).abs().max()
 print("Max diff =", diff.item())

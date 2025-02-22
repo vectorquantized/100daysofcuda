@@ -9,7 +9,7 @@
 torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel, torch::Tensor output) {
     TORCH_CHECK(input.device().is_cuda() , "A must be a cuda tensor");
     TORCH_CHECK(kernel.device().is_cuda() , "A must be a cuda tensor");
-    TORCH_CHECK(input.ndimension() == 3, "input must be 4D tensors.");
+    TORCH_CHECK(input.ndimension() == 3, "input must be 3D tensors.");
     TORCH_CHECK(input.ndimension() == output.ndimension(), "Input and Output must be of the same dimension");
     TORCH_CHECK(input.size(0) == output.size(0), "Batch dimension should be of the same size for both input and output.");
     TORCH_CHECK(kernel.ndimension() == 2, "kernel must be 2D tensors.");

@@ -34,7 +34,7 @@ torch::Tensor batched_conv2d_forward(torch::Tensor input, torch::Tensor kernel, 
     
     size_t shared_mem_size = sizeof(float) * channels * in_tile_width * in_tile_width;
     
-    conv2d_tiled<float><<<grid_dim, block_dim, shared_mem_size>>>(
+    conv2d_tiled_channel<float><<<grid_dim, block_dim, shared_mem_size>>>(
         input.data_ptr<float>(),
         kernel.data_ptr<float>(),
         output.data_ptr<float>(),

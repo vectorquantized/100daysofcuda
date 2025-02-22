@@ -11,10 +11,10 @@ cuda_include_path = os.path.join(this_dir, "cuda")
 torch_include_paths = torch.utils.cpp_extension.include_paths()
 
 setup(
-    name="sigp",
+    name="sigp_batched",
     ext_modules=[
         CUDAExtension(
-            "sigp",
+            "sigp_batched",
             sources=[
                 "bindings.cpp",             # Python binding file
                 "batched_conv2d.cu",

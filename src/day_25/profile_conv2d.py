@@ -7,7 +7,7 @@ kernel_size = (3, 3)
 
 weight = torch.randn(*kernel_size, device="cuda", dtype=torch.float32)
 input = torch.randn(B, H, W, device="cuda", dtype=torch.float32)
-output = torch.zeros_like(input, device=input.device, dtype=input.dtype)
+output = torch.zeros((B, H - kernel_size[0] + 1, W - kernel_size[1] + 1), device=input.device, dtype=input.dtype)
 
 print(f"{input.shape=}, {weight.shape=}")
 
