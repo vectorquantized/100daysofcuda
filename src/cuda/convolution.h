@@ -5,6 +5,82 @@
 #define OUT_TILE_WIDTH 12
 #define SHARED_INDEX(row, col, in_tile_width) ((row) * in_tile_width + (col))
 
+
+template<typename T>
+__global__ void conv2d_tiled_channel_in_out(const T* __restrict__ input, const T* __restrict__ kernel,
+                            T* __restrict__ output, int filter_size, int filter_radius, 
+                            int batch_size, int out_channels, int in_channels, int height, int width, 
+                            int out_height, int out_width) {
+
+    // Calculate output positions
+    const int row_out = blockIdx.y * OUT_TILE_WIDTH + threadIdx.y;
+    const int col_out = blockIdx.x * OUT_TILE_WIDTH + threadIdx.x;
+    const int batch_idx = blockIdx.z / out_channels;
+    const int out_c = blockIdx.z % out_channels;
+
+    extern __shared__ T m_shared[];
+    // we could just use in_tile_wdith = blockDim.x;
+    const int in_tile_width = OUT_TILE_WIDTH + filter_size - 1;
+
+    const int row_in = row_out;
+    const int col_in = col_out;
+
+    // Calculate batch offsets
+    const T* input_batch = input + batch_idx * in_channels * height * width;
+    T* output_batch = output + (batch_idx * out_channels) * out_height * out_width;
+
+    // for(int out_c = 0; out_c < out_channels; ++out_c) {
+    // Initialize accumulator per output channel
+    T p_value = static_cast<T>(0);
+
+    // Process each input channel
+    // Idea is to load one channel, calculate the result
+    // accumulate the subsequent convs on p_value until all channels are done.
+    for(int c = 0; c < in_channels; ++c) {
+        // we need this as we load the values per channel 
+        const int shared_offset = c * in_tile_width * in_tile_width;
+        
+        // Load input to shared memory
+        if (row_in < height && col_in < width) {
+            m_shared[shared_offset + SHARED_INDEX(threadIdx.y, threadIdx.x, in_tile_width)] =
+                input_batch[c * height * width + row_in * width + col_in];
+        } else {
+            m_shared[shared_offset + SHARED_INDEX(threadIdx.y, threadIdx.x, in_tile_width)] = static_cast<T>(0);
+        }
+        
+        __syncthreads();
+
+        // current thread that is producing the output, should stay within bounds.
+        // also, we want the row_out and col_out to be smaller than output size.
+        if(threadIdx.y < OUT_TILE_WIDTH && threadIdx.x < OUT_TILE_WIDTH && 
+            row_out < out_height && col_out < out_width) {
+            // kernel is also laid out per channel.
+            const int kernel_offset = (out_c * in_channels + c) * filter_size * filter_size;
+            // all threads have stored the corresponding tiles inside shared memory
+            // we can make each thread calculate the output for one output cell by 
+            // iterating over kernel values.
+            // TODO: still need to ensure if we need #pragma here
+            #pragma unroll
+            for(int i = 0; i < filter_size; ++i) {
+                #pragma unroll
+                for(int j = 0; j < filter_size; ++j) {
+                    p_value += kernel[kernel_offset + i * filter_size + j] * 
+                        m_shared[shared_offset + SHARED_INDEX(threadIdx.y + i, threadIdx.x + j, in_tile_width)];
+                }
+            }
+        }
+        
+        __syncthreads();
+    }
+
+    // Write output for valid cells.
+    if (threadIdx.y < OUT_TILE_WIDTH && threadIdx.x < OUT_TILE_WIDTH && 
+        row_out < out_height && col_out < out_width) {
+        output_batch[(out_c * out_height + row_out) * out_width + col_out] = p_value;
+    }
+    // }
+}
+
 template<typename T>
 __global__ void conv2d_tiled_channel(const T* __restrict__ input, const T* __restrict__ kernel,
                             T* __restrict__ output, int filter_size, int filter_radius, 

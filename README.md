@@ -443,3 +443,36 @@ Self CUDA time total: 393.756ms
 ```
 
 🚀 The version with cublasLtMatmul is 75.88% faster than bmm_broadcast_B for larger matrices!
+
+### Day 29
+For days 23-28 see the respective folders.
+On Day 29, we add convolution support using tiled conv for input shape: `B, C, H, W` and kernel shape: `C_out, C, k_h, k_w`. When C_out = 1, we do better than PyTorch but as soon as we intriduce `out_channels` our performance drops as each thread now does considerably more work.
+
+#### Results
+```
+python profile_conv2d.py
+input.shape=torch.Size([16, 3, 1024, 1024]), weight.shape=torch.Size([64, 3, 3, 3])
+C_custom.shape=torch.Size([16, 64, 1022, 1022])
+C_ref.shape=torch.Size([16, 64, 1022, 1022])
+Results match: True
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  Total GFLOPs  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+void conv2d_tiled_channel_in_out<float>(float const*...         0.00%       0.000us         0.00%       0.000us       0.000us      57.943ms        85.38%      57.943ms      57.943ms             1            --  
+                                          custom_conv2d         0.00%       0.000us         0.00%       0.000us       0.000us      57.943ms        85.38%      57.943ms      57.943ms             1            --  
+                                           torch_conv2d         0.00%       0.000us         0.00%       0.000us       0.000us       9.920ms        14.62%       9.920ms       9.920ms             1            --  
+                                           torch_conv2d         0.37%     254.502us         1.29%     896.260us     896.260us       0.000us         0.00%       9.919ms       9.919ms             1            --  
+                                           aten::conv2d         0.03%      17.643us         0.82%     569.332us     569.332us       0.000us         0.00%       9.919ms       9.919ms             1        57.756  
+                                      aten::convolution         0.03%      18.067us         0.79%     551.689us     551.689us       0.000us         0.00%       9.919ms       9.919ms             1            --  
+                                     aten::_convolution         0.04%      25.267us         0.77%     533.622us     533.622us       0.000us         0.00%       9.919ms       9.919ms             1            --  
+                                aten::cudnn_convolution         0.17%     117.461us         0.73%     508.355us     508.355us       9.919ms        14.62%       9.919ms       9.919ms             1            --  
+_5x_cudnn_ampere_scudnn_128x64_relu_xregs_large_nn_v...         0.00%       0.000us         0.00%       0.000us       0.000us       9.909ms        14.60%       9.909ms       9.909ms             1            --  
+void cask__5x_cudnn::computeOffsetsKernel<false, fal...         0.00%       0.000us         0.00%       0.000us       0.000us       9.664us         0.01%       9.664us       9.664us             1            --  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 69.637ms
+Self CUDA time total: 67.862ms
+
+Max diff = 0.0
+```
+
+We could be able to improve the performance here if we look into thread collaboration.
