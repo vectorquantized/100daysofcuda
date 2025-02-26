@@ -59,7 +59,7 @@ weights = F.softmax(scores, dim=-1) # shape: (B, H, N, N)
 ```
 The algorithm looks like follows:
 
-[Naive Attention Kernel](basic_attention_impl.png)
+![Naive Attention Kernel](./basic_attention_impl.png)
 
 Standard attention implementations materialize the matrices `attention_values` $(S)$ and `weights` $(P)$ to HBM, which takes $O(N^2)$ memory, often $ N >> d $ making this kernel memory bound.
 
@@ -81,7 +81,7 @@ The authors then propose a fused version (enabled due to tiling) and note that:
 
 The outline of the algorithm looks as follows:
 
-[Flash Attention implementation](flash_attention_impl.png)
+![Flash Attention implementation](./flash_attention_impl.png)
 
 ##### Kernel Design spec
 
