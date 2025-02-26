@@ -39,7 +39,7 @@ class MHA(nn.Module):
         weights = F.softmax(scores, dim=-1) # shape: (B, H, N, N)
         attention_values = weights @ v # shape: (B, H, N, D)
         attention_values = rearrange(attention_values, 'b d n d -> b n (h d)', h=self.n_heads)
-        output = self.out(attention_scores)
+        output = self.out(attention_values)
         return output
 ```
 
