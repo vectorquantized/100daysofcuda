@@ -177,3 +177,47 @@ We do the same for V. The observation here is that for the $QK^T$ computation:
     * `V` needs to align with K on the sequence dimension
 
 So `V` blocks are loaded in the same pattern as `K` blocks.
+<<<<<<< HEAD
+=======
+
+###### Compute dot product
+Now that we've loaded blocks of Q, K and V in shared memory, we need to perform the core attention computation. i.e. we need to do:
+
+$$
+S = \frac{softmax(Q \dot K^T)}{\sqrt(d)} \dot V
+$$
+
+Let's break it down, let's first do: $QK^T$. We have the function `compute_dot_product` which is called as follows:
+```cpp
+// Each warp processes its assigned query rows
+for (int local_row = 0; local_row < rows_per_warp; local_row++) {
+    // Find absolute row index
+    int row_idx = warp_row_offset + local_row;
+    
+    // Skip processing if the row is out of bounds
+    if (row_idx >= indices.valid_rows) continue;
+    
+    // Compute attention scores for this row against all valid columns
+    for (int col_idx = 0; col_idx < indices.valid_cols; col_idx++) {
+        // Skip if using causal mask and col_idx is after row_idx
+        int abs_row = indices.row_start + row_idx;
+        int abs_col = indices.col_start + col_idx;
+        if (ctx.is_causal && abs_col > abs_row) continue;
+        
+        // Calculate QK^T dot product
+        float qk = compute_dot_product<T, D_VALUE>(
+            s_Q[row_idx], s_K[col_idx], ctx.scale, warp
+        );
+```
+What are `row_idx`, `col_idx` and `warp` variables? Let's inspect the for loop. The variable `local_row` is used to get the absolute row index: `row_idx`. `local_row`'s upper limit is `rows_per_warp` which is calculated as: 
+
+```cpp
+const int warp_count = blockDim.x / 32;
+     
+// Each warp handles specific rows
+const int rows_per_warp = BLOCK_SIZE_M / warp_count;
+```
+We've set `BLOCK_SIZE_M` to `64` and `blockDim.x` is the number of threads per block which is set to `256`. So that makes `warp_count` = `8` and `rows_per_warp` = `8` as well. Each warp is responsible for **8** rows and we have a total of **8** warps per block.
+
+Imagine we're in warp 0, `local_row` goes from `[0, 8)` in `compute_dot_product` we send `S_Q[0...7]` and each thread now is responsible for values at indices: `threadIdx + (n - 1) * 32`, where `n = D_VALUE / 32`, so thread 0 is responsible for indices 0, 32, 64 and 96.
+>>>>>>> 65ac960 (continuing with flash attention write-up)
