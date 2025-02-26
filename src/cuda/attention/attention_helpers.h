@@ -15,7 +15,7 @@ __device__ void load_qkv_blocks(
    T s_Q[BLOCK_SIZE_M][D_VALUE],
    T s_K[BLOCK_SIZE_N][D_VALUE],
    T s_V[BLOCK_SIZE_N][D_VALUE],
-   const host::AttentionContext<T>& ctx
+   const host::AttentionContext<T>& ctx,
    BlockIndices& indices
 ) {
    // Calculate batch and head offset for indexing
