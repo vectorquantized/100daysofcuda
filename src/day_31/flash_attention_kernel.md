@@ -28,7 +28,7 @@ class MHA(nn.Module):
         Args:
             input: torch.Tensor of shape: (B, N, E)
         Returns:
-            output torch.Tensor of shape: (B, )
+            output torch.Tensor of shape: (B, N, O)
         """
         qkv = self.qkv_fused(input)
         q, k, v = torch.chunk(qkv, 3, dim=-1) # Each is of shape: (B, N, D)
@@ -51,7 +51,7 @@ We'd need matmul kernel for:
 scores = (q * scale) @ k.transpose(2, 3) # shape: (B, H, N, N)
 attention_values = weights @ v # shape: (B, H, N, D)
 ```
-Note: We ignore the fused qkv and output linear layers for now.
+Note: We ignore the fused qkv and output linear layers for now, and we scale `Q` before performing `Q @ K^T` to prevent numerical instability. Without this, the dot product could grow very large, leading to issues when computing softmax, as exponentiating large numbers can cause overflow.
 
 We'd need the softmax kernel for:
 ```python
@@ -85,13 +85,18 @@ The outline of the algorithm looks as follows:
 
 ##### Kernel Design spec
 
+Our goal is to design a kernel that:
+1.	Avoids excessive memory accesses to HBM.
+2.	Efficiently loads and computes QK^T in shared memory.
+3.	Applies softmax in a numerically stable, online fashion.
+4.	Computes the final weighted sum with V without explicitly materializing intermediate matrices.
+
 Inorder to implement this kernel, we'd need a way to load the blocks of Q, K and V matrices in the shared memory then compute their dot product, apply softmax and compute dot product with value block. So, let's see the functions that we could implement:
 
 * `load_qkv_blocks` will load $Q$, $K$ and $V$ in shared memory by block.
 * `compute_dot_product` will compute $QK^T$
 * A function that computes online softmax, `update_softmax_state`
 Note that we perform the softmax statistics update and multiplication with V in one go as follows:
-
 ```cpp
 T scale_prev = exp(m_prev - m_new) / l_new;
 T scale_new = exp(qk - m_new) / l_new;
@@ -146,7 +151,7 @@ The loading is done as follows for `Q` (Note that we're loading rows of Q):
        }
    }
 ```
-The `row_idx` is `row_offset + threadIdx.x / D_VALUE`, so `row_idx` will be the same for all threads with `threadIdx.x < D_VALUE`, `col_idx` would be the value of `threadIdx.x` when `threadIdx.x < D_VALUE`. So, after the loop has finished we'd have a block of `Q` of shape: $B_r \times d$ loaded in shared memory.
+Each thread loads a multiple elements of Q, iterating over rows using row_offset. The `col_idx` ensures we distribute across the depth dimension. So, after the loop has finished we'd have a block of `Q` of shape: $B_r \times d$ loaded in shared memory.
 
 We'd load the corresponding columns of `K`:
 
