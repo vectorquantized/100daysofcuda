@@ -225,9 +225,13 @@ Calculating `Q @ K.T` is similar to doing the dot product between rows of `Q` an
 
 Each warp consists of 32 threads, and we unroll dot product computation across D_VALUE (128 in your case). Instead of each thread handling a single element, we distribute the workload such that:
 * Thread i processes elements:
+
 $$
+
 i, i + 32, i + 64, i + 96
+
 $$
+
 * This ensures memory coalescing when fetching data from shared memory, as each thread accesses consecutive memory locations spaced 32 apart.
 
 
