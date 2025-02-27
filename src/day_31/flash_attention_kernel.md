@@ -177,8 +177,6 @@ We do the same for V. The observation here is that for the $QK^T$ computation:
     * `V` needs to align with K on the sequence dimension
 
 So `V` blocks are loaded in the same pattern as `K` blocks.
-<<<<<<< HEAD
-=======
 
 ###### Compute dot product
 Now that we've loaded blocks of Q, K and V in shared memory, we need to perform the core attention computation. i.e. we need to do:
