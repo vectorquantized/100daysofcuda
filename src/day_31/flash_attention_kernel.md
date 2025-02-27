@@ -220,4 +220,3 @@ const int rows_per_warp = BLOCK_SIZE_M / warp_count;
 We've set `BLOCK_SIZE_M` to `64` and `blockDim.x` is the number of threads per block which is set to `256`. So that makes `warp_count` = `8` and `rows_per_warp` = `8` as well. Each warp is responsible for **8** rows and we have a total of **8** warps per block.
 
 Imagine we're in warp 0, `local_row` goes from `[0, 8)` in `compute_dot_product` we send `S_Q[0...7]` and each thread now is responsible for values at indices: `threadIdx + (n - 1) * 32`, where `n = D_VALUE / 32`, so thread 0 is responsible for indices 0, 32, 64 and 96.
->>>>>>> 65ac960 (continuing with flash attention write-up)
