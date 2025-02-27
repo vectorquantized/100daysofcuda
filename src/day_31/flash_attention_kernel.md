@@ -224,14 +224,7 @@ We do the same thing for `s_K` shared memory region.
 Calculating `Q @ K.T` is similar to doing the dot product between rows of `Q` and `K`. Why is that the case? Well, the shape of `Q` is `B, H, N, D` and the shape of `K` is also `B, H, N, D`. For matrix multiplication, we need `K` to be transposed, but if we could access the rows of `K` efficiently (coalesced memory access), then in order to calculate one element of the attention matrix we need to multiply `D` values from `Q` and `D` values from `K`. This way, we’ll have an output of shape: `B, H, N, N`.
 
 Each warp consists of 32 threads, and we unroll dot product computation across D_VALUE (128 in your case). Instead of each thread handling a single element, we distribute the workload such that:
-* Thread i processes elements:
-
-$$
-
-i, i + 32, i + 64, i + 96
-
-$$
-
+* Thread i processes elements: `i, i + 32, i + 64, i + 96`
 * This ensures memory coalescing when fetching data from shared memory, as each thread accesses consecutive memory locations spaced 32 apart.
 
 
