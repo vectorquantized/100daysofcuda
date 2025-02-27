@@ -182,7 +182,7 @@ So `V` blocks are loaded in the same pattern as `K` blocks.
 Now that we've loaded blocks of Q, K and V in shared memory, we need to perform the core attention computation. i.e. we need to do:
 
 $$
-S = \frac{softmax(Q \dot K^T)}{\sqrt(d)} \dot V
+S = \text{softmax}\left(\frac{Q K^T}{\sqrt{d}}\right) V
 $$
 
 Let's break it down, let's first do: $QK^T$. We have the function `compute_dot_product` which is called as follows:
@@ -219,7 +219,20 @@ We've set `BLOCK_SIZE_M` to `64` and `blockDim.x` is the number of threads per b
 
 Imagine we're in warp 0, `local_row` goes from `[0, 8)` in `compute_dot_product` we send `S_Q[0...7]` and each thread now is responsible for values at indices: `threadIdx + (n - 1) * 32`, where `n = D_VALUE / 32`, so thread 0 is responsible for indices 0, 32, 64 and 96.
 
-We do the same thing for `s_K` shared memory region. Calculating `Q @ K.T` is similar to doing the dot product between rows of `Q` and `K`. Why is that the case? Well, shape of `Q` is `B, H, N, D` and shape of `K` is also `B, H, N, D`. For matrix multiplication we need `K` to be transposed but if we could access the rows of `K` efficiently (coalesced memory access) then in order to calculate one element of the attention matrix we need to multiply `D` values from `Q` and `D` values from `K`, this way we'll have the output of shape: `B, H, N, N`. Let's now peak into `compute_dot_product`:
+We do the same thing for `s_K` shared memory region. 
+
+Calculating `Q @ K.T` is similar to doing the dot product between rows of `Q` and `K`. Why is that the case? Well, the shape of `Q` is `B, H, N, D` and the shape of `K` is also `B, H, N, D`. For matrix multiplication, we need `K` to be transposed, but if we could access the rows of `K` efficiently (coalesced memory access), then in order to calculate one element of the attention matrix we need to multiply `D` values from `Q` and `D` values from `K`. This way, we’ll have an output of shape: `B, H, N, N`.
+
+Each warp consists of 32 threads, and we unroll dot product computation across D_VALUE (128 in your case). Instead of each thread handling a single element, we distribute the workload such that:
+* Thread i processes elements:
+$$
+i, i + 32, i + 64, i + 96
+$$
+* This ensures memory coalescing when fetching data from shared memory, as each thread accesses consecutive memory locations spaced 32 apart.
+
+
+Let's now peek into `compute_dot_product`:
+
 ```cpp
 const int lane_idx = threadIdx.x % 32;
 T qk_sum = static_cast<T>(0);
@@ -245,4 +258,7 @@ if (lane_idx == 0) {
 return warp.shfl(qk_sum, 0);
 ```
 
-`qk_sum` represents the result of the dot product of one row of `Q` with the corresponding row of `K`, we've written it such that each thread in a warp is responsible for multiplying more than one element. For `D_VALUE = 128`, thread `0` is responsible for indices: `0, 32, 64, 96`, thread 1 is responsible for `1, 33, 65 97` and so on. We reduce `qk_sum` using the standard reduction operation (we've implemented this on [Day 14](https://github.com/vectorquantized/100daysofcuda/blob/main/README.md#day-14-atomic-sum)) and multiply it with the `scale` value. After that we broadcast this value to all the threads for further processing, without this broadcast we wouldn't be able to fuse the multiplication with value matrix inside the softmax state update.
+`qk_sum` represents the result of the dot product of one row of `Q` with the corresponding row of `K`, we've written it such that each thread in a warp is responsible for multiplying more than one element. For `D_VALUE = 128`, thread `0` is responsible for indices: `0, 32, 64, 96`, thread 1 is responsible for `1, 33, 65 97` and so on. We reduce `qk_sum` using the standard reduction operation (we've implemented this on [Day 14](https://github.com/vectorquantized/100daysofcuda/blob/main/README.md#day-14-atomic-sum)) and multiply it with the `scale` value. 
+
+After that we broadcast this value to all the threads for further processing. Only thread 0 in each warp holds the final dot product sum after reduction.
+* To ensure all threads in the warp can use this result in the next stage, we broadcast it across the warp.
