@@ -89,8 +89,8 @@ __device__ void load_qkv_blocks(
          qk_sum *= scale;
      }
      
-     // Broadcast to all threads
-     return warp.shfl(qk_sum, 0);
+        // Broadcast to all threads
+        return warp.shfl(qk_sum, 0);
  }
 
 
