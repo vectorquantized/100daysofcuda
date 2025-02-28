@@ -306,14 +306,19 @@ We have two case:
 In the second case, the scaling of the `l_prev` happens and is needed as the max value has been updated. `l_prev` previoulsy would have had terms like:
 
 $$
-l_prev = \exp(qk_1 - m_prev) + \exp(qk_2 - m_prev) + ... + \exp(qk_n - m_prev) + \exp(m_prev - m_prev) \\
-l_prev = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev)}{exp(m_prev)}
+l_{prev} = e^{qk_1 - m_{prev}} + e^{qk_2 - m_{prev}} + \dots + e^{qk_n - m_{prev}} + e^{m_{prev} - m_{prev}}
+$$
+$$
+l_{prev} = \frac{e^{qk_1} + e^{qk_2} + \dots + e^{qk_n} + e^{m_{prev}}}{e^{m_{prev}}}
 $$
 
 When the max value gets updated we effectively do:
+
 $$
-l_new = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev)}{exp(m_prev)} \dot \frac{\exp(m_prev)}{exp(qk)} + 1 \\
-l_new = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev) + 1}{exp(qk)} 
+l_{new} = \frac{e^{qk_1} + e^{qk_2} + \dots + e^{qk_n} + e^{m_{prev}}}{e^{m_{prev}}} \cdot \frac{e^{m_{prev}}}{e^{qk}} + 1
+$$
+$$
+l_{new} = \frac{e^{qk_1} + e^{qk_2} + \dots + e^{qk_n} + e^{m_{prev}} + e^{qk}}{e^{qk}}
 $$
 
 Now, let's look at the softmax update rule to compute the output values:
