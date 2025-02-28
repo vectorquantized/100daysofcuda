@@ -259,3 +259,109 @@ return warp.shfl(qk_sum, 0);
 
 After that we broadcast this value to all the threads for further processing. Only thread 0 in each warp holds the final dot product sum after reduction.
 * To ensure all threads in the warp can use this result in the next stage, we broadcast it across the warp.
+
+###### Updating the softmax state
+The final two steps of attention computation require us to apply softmax and followed by a multiplication with value matrix. 
+In Flash Attention we'll fuse the two operations together for performance reasons and avoid materializing the result of the softmax matrix and writing it back to HBM and reading it back from HBM for finally multiplying it with value matrix.
+
+We code the `update_softmax_state` function whose signature looks like:
+
+```cpp
+template<typename T, int D_VALUE>
+__device__ void update_softmax_state(
+    T& m_prev,
+    T& l_prev,
+    T* o_prev,
+    const T qk,
+    const T* v_row,
+    const int lane_idx
+)
+```
+This is the function that implements online softmax. It takes in the previous states which are maintained in `m_prev` (contains the max per row), `l_prev` (normalization used in softmax) and `o_prev` (contains the output values written so far in shared memory). We need `o_prev` as we need to update the value based on the updated scale in case the newly calculated value of `qk` is greater than the running max value.
+
+Now let's look at the function step by step: 
+```cpp
+// Calculate new max value for numerical stability
+T m_new = max(m_prev, qk);
+T l_new;
+
+// Compute new denominator
+if (isinf(m_prev)) {
+    // First valid attention score
+    l_new = static_cast<T>(1);
+} else {
+    // Scale old sum and add new value
+    l_new = l_prev * exp(m_prev - m_new) + exp(qk - m_new);
+}
+```
+We find the max of `m_prev` and `qk` and update the norm `l_new` based on the old norm value. Let's look at this line:
+```cpp
+l_new = l_prev * exp(m_prev - m_new) + exp(qk - m_new);
+```
+
+We have two case:
+
+* `m_prev > qk` then `m_new = m_prev` which gives `l_new = l_prev + exp(qk - m_prev)` (just added the newly calculated value to the norm)
+* `m_prev <= qk` then `m_new = qk` which gives `l_new = l_prev * exp(m_prev - qk) + exp(qk - qk)`
+In the second case, the scaling of the `l_prev` happens and is needed as the max value has been updated. `l_prev` previoulsy would have had terms like:
+
+$$
+l_prev = \exp(qk_1 - m_prev) + \exp(qk_2 - m_prev) + ... + \exp(qk_n - m_prev) + \exp(m_prev - m_prev) \\
+l_prev = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev)}{exp(m_prev)}
+$$
+
+When the max value gets updated we effectively do:
+$$
+l_new = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev)}{exp(m_prev)} \dot \frac{\exp(m_prev)}{exp(qk)} + 1 \\
+l_new = \frac{\exp(qk_1) + exp(qk_2)+ ... + \exp(qk_n) + \exp(m_prev) + 1}{exp(qk)} 
+$$
+
+Now, let's look at the softmax update rule to compute the output values:
+```cpp
+// Apply online softmax update rule
+for (int d = lane_idx; d < D_VALUE; d += 32) {
+    if (isinf(m_prev)) {
+        // First entry, just set the value
+        o_prev[d] = v_row[d];
+    } else {
+        // Update running weighted sum
+        T scale_prev = exp(m_prev - m_new) / l_new;
+        T scale_new = exp(qk - m_new) / l_new;
+        o_prev[d] = o_prev[d] * scale_prev + v_row[d] * scale_new;
+    }
+}
+```
+
+Initially, `o_prev[d] = v_row[d]` and when `m_prev` has a value we're doing:
+```cpp
+o_prev[d] = v_row[d] * (exp(m_prev - m_new) / l_new) + v_row[d] * (exp(qk - m_new) / l_new);
+```
+Let's look at the two cases again:
+* `m_prev > qk` => `m_new = m_prev` and that makes `o_prev[d] = v_row[d] / l_new + v_row[d] * (exp(qk - m_prev) / l_new)
+    * We just keep the result of online softmax multiplied by V.
+* `m_prev <= qk` => `m_new = qk` and that makes `o_prev[d] = v_row[d] * (exp(m_prev - qk) / l_new) + v_row[d] / l_new
+    * Here, we update the previous O value by multiplying with the new scale and add to it the value of online softmax multiplied by V.
+
+###### Writing the results to HBM
+After we're done calcuating the block of output, we write it back to the HBM. Below is a very straight forward way to write the results back to the HBM.
+
+```cpp
+// Write final output to global memory
+const int batch_head_offset = blockIdx.x * ctx.H * ctx.N * ctx.D + blockIdx.y * ctx.N * ctx.D;
+const int row_start = blockIdx.z * BLOCK_SIZE_M;
+
+for (int local_row = 0; local_row < rows_per_warp; local_row++) {
+    int row_idx = warp_row_offset + local_row;
+    
+    // Skip if row is out of bounds
+    if (row_start + row_idx >= ctx.N) continue;
+    
+    // Each thread writes its part of the output
+    for (int d = lane_idx; d < D_VALUE; d += 32) {
+        int o_pos = batch_head_offset + (row_start + row_idx) * ctx.D + d;
+        O[o_pos] = o_i[local_row][d];
+    }
+}
+```
+
+This concludes the implementation of Flash Attention, The original algorithm is divided into 16 steps and we've covered all of them. It's now easy to understand but still remains one of the harder kernels I've written as it requires extra care to get it right.
