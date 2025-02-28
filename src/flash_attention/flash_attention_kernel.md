@@ -342,9 +342,9 @@ Initially, `o_prev[d] = v_row[d]` and when `m_prev` has a value we're doing:
 o_prev[d] = v_row[d] * (exp(m_prev - m_new) / l_new) + v_row[d] * (exp(qk - m_new) / l_new);
 ```
 Let's look at the two cases again:
-* `m_prev > qk` => `m_new = m_prev` and that makes `o_prev[d] = v_row[d] / l_new + v_row[d] * (exp(qk - m_prev) / l_new)
+* `m_prev > qk` => `m_new = m_prev` and that makes `o_prev[d] = v_row[d] / l_new + v_row[d] * (exp(qk - m_prev) / l_new)`
     * We just keep the result of online softmax multiplied by V.
-* `m_prev <= qk` => `m_new = qk` and that makes `o_prev[d] = v_row[d] * (exp(m_prev - qk) / l_new) + v_row[d] / l_new
+* `m_prev <= qk` => `m_new = qk` and that makes `o_prev[d] = v_row[d] * (exp(m_prev - qk) / l_new) + v_row[d] / l_new`
     * Here, we update the previous O value by multiplying with the new scale and add to it the value of online softmax multiplied by V.
 
 ###### Writing the results to HBM
