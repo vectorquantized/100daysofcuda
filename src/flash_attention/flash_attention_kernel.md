@@ -1,4 +1,4 @@
-## Day 31 Flash Attention Kernel
+## Flash Attention Kernel
 On Day 30 we coded Flash Attention Kernel. It's pretty involved to code and get right but the algorithm is pretty simple to understand. At the heart of it lies tiled GEMM (using shared memory) between the query and transposed key matrix and the online softmax implementation that is fused into the kernel. Let's understand what's happening in Flash Attention Kernel to build up to the actual implementation.
 
 ### Multi-Head Attention (MHA)
