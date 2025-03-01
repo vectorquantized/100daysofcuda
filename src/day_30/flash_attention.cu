@@ -11,8 +11,7 @@ void flash_attention(
     const torch::Tensor& V,
     torch::Tensor& O,
     const bool is_causal,
-    c10::optional<torch::cuda::CUDAStream> stream = c10::nullopt
-) {
+    c10::optional<at::cuda::CUDAStream> stream = c10::nullopt) {
     // Get tensor dimensions
     const int B = Q.size(0); // Batch size
     const int H = Q.size(1); // Number of heads

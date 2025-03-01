@@ -1,4 +1,7 @@
+#ifndef ROPE_KERNEL_H
+#define ROPE_KERNEL_H
 
+#include <cuda_runtime.h>
 
 template<typename IndexType>
 struct RopeContext {
@@ -53,3 +56,5 @@ __global__ void apply_rope(
                 K_out[dim_idx + 1] = k_odd * cos_val + k_even * sin_val;
         }
 }
+
+#endif // ROPE_KERNEL_H
