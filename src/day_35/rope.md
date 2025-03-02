@@ -16,12 +16,9 @@ $$
 The rotation is applied using the 2D rotation matrix as follows:
 
 $$
-
-\begin{bmatrix} q_i{\prime} \\ q_{i+1}{\prime} \end{bmatrix}
-
-\begin{bmatrix} \cos(\theta_p) & -\sin(\theta_p) \\ \sin(\theta_p) & \cos(\theta_p) \end{bmatrix}
-\begin{bmatrix} q_i \\ q_{i+1} \end{bmatrix}
-
+\begin{bmatrix} q_i{\prime} \newline q_{i+1}{\prime} \end{bmatrix} = 
+\begin{bmatrix} \cos(\theta_p) & -\sin(\theta_p) \newline \sin(\theta_p) & \cos(\theta_p) \end{bmatrix}
+\begin{bmatrix} q_i \newline q_{i+1} \end{bmatrix}
 $$
 
 In code we do something like the following:
