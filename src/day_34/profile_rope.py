@@ -5,10 +5,10 @@ import math
 import time
 
 # Define test dimensions
-batch_size = 1
-seq_len = 8
-num_heads = 1
-head_dim = 16
+batch_size = 4
+seq_len = 8192
+num_heads = 16
+head_dim = 1024
 # Base frequency for RoPE. Default is 10000.0.
 theta = 10000.0
 
@@ -20,81 +20,91 @@ k = torch.randn(batch_size, seq_len, num_heads, head_dim, device="cuda", dtype=t
 q_out = torch.zeros_like(q)
 k_out = torch.zeros_like(k)
 
-
 # Compute frequency tensor
 dim = torch.arange(0, head_dim, 2, device=q.device).float()  # Shape: (D/2,)
 freqs = 1.0 / (theta ** (dim / head_dim))  # Shape: (D/2,)
 
 # Compute position indices
 positions = torch.arange(seq_len, device=q.device).float()  # Shape: (L,)
-pos_ids = positions[None, :].expand(batch_size, -1) # B, L
+pos_ids = positions[None, :].expand(batch_size, -1).int() # B, L
 angles = torch.einsum("l,d->ld", positions, freqs)  # Shape: (L, D/2)
 
 # Compute sin and cos
 sin = torch.sin(angles)  # Shape: (L, D/2)
 cos = torch.cos(angles)  # Shape: (L, D/2)
 
-print(f"Query shape: {q.shape}")
-print(f"Key shape: {k.shape}")
-# print(f"t shape: {t.shape}")
-print(f"freqs shape: {freqs.shape}")
-print(f"Pos IDs shape: {pos_ids.shape}")
-print(f"Cosine table shape: {cos.shape}")
-print(f"Sine table shape: {sin.shape}")
 
-def apply_rope(x: torch.Tensor, cos, sin):
+def rotate(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    """
+    Rotates the input tensor based on rotation matrix.
+
+    Args:
+        x (torch.Tensor): Input tensor of shape (B, L, H, D).
+        cos (torch.Tensor): real part of the embs, shape: (B, L, H, D/2)
+        sin (torch.Tensor): imaginary part of the embs, shape: (B, L, H, D/2)
+
+    Returns:
+        torch.Tensor: The tensor after applying rotation.
+    """
+    
+    # Select even and odd indices
+    x_even = x[..., ::2]  # Shape: (B, L, H, D/2)
+    x_odd = x[..., 1::2]  # Shape: (B, L, H, D/2)
+
+    # Apply rotation
+    x_rot = torch.empty_like(x)
+    x_rot[..., ::2] = x_even * cos - x_odd * sin
+    x_rot[..., 1::2] = x_odd * cos + x_even * sin
+
+    return x_rot
+
+def apply_rope(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
     """
     Applies Rotary Position Embeddings (RoPE) to the input tensor.
 
     Args:
-        x (torch.Tensor): Input tensor of shape (B, L, H, D).
+        q (torch.Tensor): Query tensor of shape (B, L, H, D).
+        k (torch.Tensor): Key tensor of shape (B, L, H, D).
         cos (torch.Tensor): real part of the embs, shape: (L, D/2)
         sin (torch.Tensor): imaginary part of the embs, shape: (L, D/2)
 
     Returns:
         torch.Tensor: The tensor after applying RoPE.
     """
-    B, L, H, D = x.shape
+    B, L, H, D = q.shape
     assert D % 2 == 0, "Head dimension must be even for RoPE."
+    assert q.shape == k.shape, f"Query and key shapes should match, got: {q.shape=} and {k.shape=}"
 
     # Expand for broadcasting
     sin = sin.unsqueeze(0).unsqueeze(2)  # Shape: (1, L, 1, D/2)
     cos = cos.unsqueeze(0).unsqueeze(2)  # Shape: (1, L, 1, D/2)
-
-    # Split into real and imaginary parts
-    x1, x2 = x[..., :D//2], x[..., D//2:]  # Shape: (B, L, H, D/2)
-
-    x_rot = torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=-1)
-
-    return x_rot
+    q_rot = rotate(q, cos, sin)
+    k_rot = rotate(k, cos, sin)
+    
+    return q_rot, k_rot
 
 # Warmup
 for _ in range(5):
     rope.apply_rope(q, k, pos_ids, cos, sin, q_out, k_out)
-    q_ref = apply_rope(q, cos, sin)
-    k_ref = apply_rope(k, cos, sin)
-    torch.cuda.synchronize()
-
+    apply_rope(q, k, cos, sin)
+    # torch.cuda.synchronize()
 
 # Test custom CUDA implementation
 start = time.time()
 for _ in range(10):
     rope.apply_rope(q, k, pos_ids, cos, sin, q_out, k_out)
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
 cuda_time = (time.time() - start) / 10
-print(f"Custom CUDA implementation: {cuda_time*1000:.2f} ms")
+print(f"Custom CUDA implementation: {cuda_time*1000000:.2f} us")
 
 # Test PyTorch implementation
 start = time.time()
 for _ in range(10):
-    q_ref = apply_rope(q, cos, sin)
-    k_ref = apply_rope(k, cos, sin)
-    torch.cuda.synchronize()
+    q_ref, k_ref = apply_rope(q, k, cos, sin)
+    # torch.cuda.synchronize()
 
-print(f"{q_ref.shape=}")
-print(f"{q_out.shape=}")
 torch_time = (time.time() - start) / 10
-print(f"PyTorch implementation: {torch_time*1000:.2f} ms")
+print(f"PyTorch implementation: {torch_time*1000000:.2f} us")
 print(f"Speedup: {torch_time/cuda_time:.2f}x")
 
 # Compare results
@@ -113,30 +123,10 @@ with torch.profiler.profile(
 ) as prof:
     with torch.profiler.record_function("custom_rope"):
         rope.apply_rope(q, k, pos_ids, cos, sin, q_out, k_out)
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         
     with torch.profiler.record_function("torch_rope"):
-        q_ref = apply_rope(q, cos, sin)
-        k_ref = apply_rope(k, cos, sin)
-        torch.cuda.synchronize()
+        q_ref, k_ref = apply_rope(q, k, cos, sin)
+        # torch.cuda.synchronize()
 
 print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-
-# print(f"{q_ref=}")
-# print("*"*80)
-# print(f"{q_out=}")
-# print("*"*80)
-# Save results to visualize
-# if q_diff > 1e-5 or k_diff > 1e-5:
-#     # Save a small sample for debugging
-#     sample_idx = (0, 1, 0)  # batch 0, seq 0, head 0
-#     sample_q_custom = q_out[sample_idx].cpu().numpy()
-#     sample_q_torch = q_ref[sample_idx].cpu().numpy()
-#     sample_k_custom = k_out[sample_idx].cpu().numpy()
-#     sample_k_torch = k_ref[sample_idx].cpu().numpy()
-    
-#     print("\nSample comparison for debugging:")
-#     print("Custom Q:", sample_q_custom)
-#     print("Torch Q:", sample_q_torch)
-#     print("Custom K:", sample_k_custom)
-#     print("Torch K:", sample_k_torch)
