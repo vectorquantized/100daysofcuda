@@ -55,7 +55,7 @@ void apply_rope_forward(
         .position_ids = pos_ids_ptr, 
     };
 
-    apply_rope<<<blocks, threads, 0, cuda_stream>>>(
+    apply_rope<float, int><<<blocks, threads, 0, cuda_stream>>>(
         q_ptr, k_ptr, cos_ptr, sin_ptr, ctx, q_out_ptr, k_out_ptr
     );
 }
