@@ -12,6 +12,27 @@ struct RopeContext {
     const IndexType* __restrict__ position_ids;
 };
 
+template<typename T>
+__device__ void rotate(
+    const T* __restrict__ x, 
+    const T* __restrict__ cos, 
+    const T* __restrict__ sin,
+    int base_idx,
+    int offset,
+    T* __restrict__ out) {
+
+        int dim_idx = base_idx + offset * 2;
+        T even = x[dim_idx];
+        T odd = x[dim_idx + 1];
+        
+        T cos_val = cos[offset];
+        T sin_val = sin[offset];
+
+        out[dim_idx] = even * cos_val - odd * sin_val;
+        out[dim_idx + 1] = odd * cos_val + even * sin_val;
+
+}
+
 template<typename T, typename IndexType>
 __global__ void apply_rope(
     const T* __restrict__ Q, 
@@ -38,21 +59,8 @@ __global__ void apply_rope(
             
                 const T* cos_pos = cos + pos_id * ctx.head_dim / 2;
                 const T* sin_pos = sin + pos_id * ctx.head_dim / 2;
-                int dim_idx = base_idx + dim_offset * 2;
-
-                T q_even = Q[dim_idx];
-                T q_odd = Q[dim_idx + 1];
-                T k_even = K[dim_idx];
-                T k_odd = K[dim_idx + 1];
-
-                T cos_val = cos_pos[dim_offset];
-                T sin_val = sin_pos[dim_offset];
-
-                Q_out[dim_idx] = q_even * cos_val - q_odd * sin_val;
-                Q_out[dim_idx + 1] = q_odd * cos_val + q_even * sin_val;
-
-                K_out[dim_idx] = k_even * cos_val - k_odd * sin_val;
-                K_out[dim_idx + 1] = k_odd * cos_val + k_even * sin_val;
+                rotate<T>(Q, cos_pos, sin_pos, base_idx, dim_offset, Q_out);
+                rotate<T>(K, cos_pos, sin_pos, base_idx, dim_offset, K_out);
         }
 }
 
