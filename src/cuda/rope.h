@@ -50,17 +50,14 @@ __global__ void apply_rope(
         int batch_idx = batch_head_idx / ctx.num_heads;
         int head_idx = batch_head_idx % ctx.num_heads;
 
-        if (batch_idx < ctx.batch_size && 
-            head_idx < ctx.num_heads && 
-            seq_idx < ctx.seq_len &&
-            dim_offset * 2 + 1 < ctx.head_dim) {
-                int base_idx =((batch_idx * ctx.seq_len  + seq_idx) * ctx.num_heads + head_idx) * ctx.head_dim;
-                int pos_id = ctx.position_ids[batch_idx * ctx.seq_len + seq_idx];
-            
-                const T* cos_pos = cos + pos_id * ctx.head_dim / 2;
-                const T* sin_pos = sin + pos_id * ctx.head_dim / 2;
-                rotate<T>(Q, cos_pos, sin_pos, base_idx, dim_offset, Q_out);
-                rotate<T>(K, cos_pos, sin_pos, base_idx, dim_offset, K_out);
+        if (dim_offset * 2 + 1 < ctx.head_dim) {
+            int base_idx =((batch_idx * ctx.seq_len  + seq_idx) * ctx.num_heads + head_idx) * ctx.head_dim;
+            int pos_id = ctx.position_ids[batch_idx * ctx.seq_len + seq_idx];
+        
+            const T* cos_pos = cos + pos_id * ctx.head_dim / 2;
+            const T* sin_pos = sin + pos_id * ctx.head_dim / 2;
+            rotate<T>(Q, cos_pos, sin_pos, base_idx, dim_offset, Q_out);
+            rotate<T>(K, cos_pos, sin_pos, base_idx, dim_offset, K_out);
         }
 }
 
