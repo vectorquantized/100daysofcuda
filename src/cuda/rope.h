@@ -5,12 +5,11 @@
 
 template<typename IndexType>
 struct RopeContext {
-
-    const IndexType* __restrict__ position_ids;
     const int batch_size;
-    const int num_heads;
     const int seq_len;
+    const int num_heads;
     const int head_dim;
+    const IndexType* __restrict__ position_ids;
 };
 
 template<typename T, typename IndexType>
