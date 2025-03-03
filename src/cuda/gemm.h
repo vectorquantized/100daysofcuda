@@ -24,7 +24,7 @@ __global__ void gemm_mma(
     int warp_n = (threadIdx.y + blockIdx.y * blockDim.y);
 
     wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, InputType, wmma::col_major> a_frag;
-    wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, InputType, wmma::row_major> b_frag;
+    wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, InputType, wmma::col_major> b_frag;
     wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, AccumType> c_frag;
 
     wmma::fill_fragment(c_frag, static_cast<AccumType>(0));

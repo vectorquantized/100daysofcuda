@@ -33,9 +33,9 @@ void curandErrCheck_(curandStatus_t stat, const char *file, int line) {
 
 
 // Matrix dimensions
-#define MATRIX_M 8192
-#define MATRIX_N 8192
-#define MATRIX_K 8192
+#define MATRIX_M 16384
+#define MATRIX_N 16384
+#define MATRIX_K 16384
 
 // WMMA dimensions
 #define WMMA_M 16
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
  
     // blockDim.x must be a multiple of warpSize
     // 128x4 means we have 16 warps and a block computes a 64x64 output tile
-    blockDim.x = 128;
+    blockDim.x = 256;
     blockDim.y = 4;
 
     gridDim.x = (MATRIX_M + (WMMA_M * blockDim.x / 32 - 1)) / (WMMA_M * blockDim.x / 32);
@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
                 b_fp16, CUDA_R_16F, MATRIX_K,
                 &beta,
                 c_cublas, CUDA_R_32F, MATRIX_M,
-                CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+                CUDA_R_32F, CUBLAS_GEMM_ALGO0_TENSOR_OP));
     cudaErrCheck(cudaEventRecord(stopcublas));
     cudaErrCheck(cudaEventSynchronize(stopcublas));
 
