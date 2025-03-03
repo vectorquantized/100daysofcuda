@@ -2,8 +2,53 @@
 #define GEMM_H
 
 #include <cuda_runtime.h>
+#include <mma.h>
 #include "../cuda/cuda_utils.h"
 #define TILE_WIDTH 16
+using namespace nvcuda;
+
+namespace tensor_core {
+template<int WMMA_M, int WMMA_K, int WMMA_N,
+        typename InputType, typename AccumType>
+__global__ void gemm_mma(
+    const InputType* __restrict__ A, 
+    const InputType* __restrict__ B,
+    AccumType* __restrict__ C,
+    int M, int N, int K) {
+
+    int lda = M;
+    int ldb = K;
+    int ldc = N;
+
+    int warp_m = (threadIdx.x + blockIdx.x * blockDim.x) / warpSize;
+    int warp_n = (threadIdx.y + blockIdx.y * blockDim.y);
+
+    wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, InputType, wmma::col_major> a_frag;
+    wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, InputType, wmma::row_major> b_frag;
+    wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, AccumType> c_frag;
+
+    wmma::fill_fragment(c_frag, static_cast<AccumType>(0));
+
+    for(int k = 0; k < K; k += WMMA_K) {
+        int a_row = warp_m * WMMA_M;
+        int a_col = k;
+        int b_row = k;
+        int b_col = warp_n * WMMA_N;
+
+        if(a_row < M && a_col < K && b_row < K && b_col < N) {
+            wmma::load_matrix_sync(a_frag, A + a_row + a_col * lda, lda);
+            wmma::load_matrix_sync(b_frag, B + b_row + b_col * ldb, ldb);
+            wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+        }
+    }
+    int c_row = warp_m * WMMA_M;
+    int c_col = warp_n * WMMA_N;
+    if(c_row < M && c_col < N) {
+        wmma::store_matrix_sync(C + c_row + c_col * ldc, c_frag, ldc, wmma::mem_col_major);
+    }
+
+}
+};
 
 
 template<typename T, int TileWidth, typename ScaleType = T>

@@ -55,16 +55,20 @@ foreach(DAY_DIR ${DAY_DIRS})
     )
 
     # Link fmt and OpenMP
-    target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt)
+    target_link_libraries(${DAY_NAME} PRIVATE fmt::fmt
+        ${CUDA_LIBRARIES}
+        ${CUDA_cublas_LIBRARY}
+        ${CUDA_curand_LIBRARY}
+    )
 
 
     # Set compilation flags for CUDA and C++
     target_compile_options(${DAY_NAME} PRIVATE 
         # CUDA-Specific Flags
-        $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
-        $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
-        $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>
-        $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+        # $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>
+        # $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>
+        # $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_80>
+        # $<$<COMPILE_LANGUAGE:CUDA>:-O3>
 
     )
     

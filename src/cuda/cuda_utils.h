@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 #include <iostream>  
 #include <iomanip>
+#include <vector>
 
 #define CEIL_DIV(M, N) ((M + N - 1 ) / N)      
 
