@@ -29,6 +29,7 @@ __global__ void gemm_mma(
 
     wmma::fill_fragment(c_frag, static_cast<AccumType>(0));
 
+    #pragma unroll
     for(int k = 0; k < K; k += WMMA_K) {
         int a_row = warp_m * WMMA_M;
         int a_col = k;

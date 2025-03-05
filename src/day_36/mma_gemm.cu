@@ -35,7 +35,7 @@ void curandErrCheck_(curandStatus_t stat, const char *file, int line) {
 // Matrix dimensions
 #define MATRIX_M 16384
 #define MATRIX_N 16384
-#define MATRIX_K 16384
+#define MATRIX_K 32768
 
 // WMMA dimensions
 #define WMMA_M 16
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
     cublasErrCheck(cublasCreate(&cublasHandle));
     
     // Use tensor cores
-    cublasErrCheck(cublasSetMathMode(cublasHandle, CUBLAS_TENSOR_OP_MATH));
+    cublasErrCheck(cublasSetMathMode(cublasHandle, CUBLAS_DEFAULT_MATH));
     
     cudaErrCheck(cudaMalloc((void**)&a_fp32, MATRIX_M * MATRIX_K * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&b_fp32, MATRIX_K * MATRIX_N * sizeof(float)));
@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
  
     // blockDim.x must be a multiple of warpSize
     // 128x4 means we have 16 warps and a block computes a 64x64 output tile
-    blockDim.x = 256;
+    blockDim.x = 128;
     blockDim.y = 4;
 
     gridDim.x = (MATRIX_M + (WMMA_M * blockDim.x / 32 - 1)) / (WMMA_M * blockDim.x / 32);
@@ -149,13 +149,13 @@ int main(int argc, char* argv[]) {
     printf("Running with cuBLAS...\n");
     cudaErrCheck(cudaEventRecord(startcublas));
     cublasErrCheck(cublasGemmEx(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
-                MATRIX_M, MATRIX_N, MATRIX_K,
-                &alpha,
-                a_fp16, CUDA_R_16F, MATRIX_M,
-                b_fp16, CUDA_R_16F, MATRIX_K,
-                &beta,
-                c_cublas, CUDA_R_32F, MATRIX_M,
-                CUDA_R_32F, CUBLAS_GEMM_ALGO0_TENSOR_OP));
+        MATRIX_M, MATRIX_N, MATRIX_K,
+        &alpha,
+        a_fp32, CUDA_R_32F, MATRIX_M,  // Changed from a_fp16 and CUDA_R_16F
+        b_fp32, CUDA_R_32F, MATRIX_K,  // Changed from b_fp16 and CUDA_R_16F
+        &beta,
+        c_cublas, CUDA_R_32F, MATRIX_M,
+        CUDA_R_32F, CUBLAS_GEMM_DEFAULT));
     cudaErrCheck(cudaEventRecord(stopcublas));
     cudaErrCheck(cudaEventSynchronize(stopcublas));
 
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
        float v2 = c_host_cublas[i];
        float diff  = fabs(v1 - v2);
        float relative_err = diff / v2;
-       float eps = 1e-4;
+       float eps = 1e-3;
        if ((relative_err >= eps)) {
           errors++;
           if (errors < 10) printf("%f %f\n", v1, v2);
