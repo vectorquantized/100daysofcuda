@@ -5,6 +5,7 @@
 #include "../cuda/gemm.h"
 #include "../cuda/cuda_utils.h"
 #include "../cuda/cutlass/transpose.h"
+#include "naive_transpose_cutlass.h"
 
 #define TILE_WIDTH 16
 

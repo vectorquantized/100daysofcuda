@@ -28,6 +28,50 @@
 
 #include "../../cuda/cutlass/util.h"
 
+template <class Element, class SmemLayout> struct SharedStorageTranspose {
+    cute::array_aligned<Element, cute::cosize_v<SmemLayout>,
+                        cutlass::detail::alignment_for_swizzle(SmemLayout{})>
+        smem;
+  };
+
+template <class TensorS, class TensorD, class SmemLayoutS, class ThreadLayoutS,
+          class SmemLayoutD, class ThreadLayoutD>
+__global__ static void __launch_bounds__(256, 1)
+    transpose_kernel_smem(TensorS const S, TensorD const D,
+                        SmemLayoutS const smemLayoutS, ThreadLayoutS const tS,
+                        SmemLayoutD const smemLayoutD, ThreadLayoutD const tD) {
+  using namespace cute;
+  using Element = typename TensorS::value_type;
+
+  // Use Shared Storage structure to allocate aligned SMEM addresses.
+  extern __shared__ char shared_memory[];
+  using SharedStorage = SharedStorageTranspose<Element, SmemLayoutD>;
+  SharedStorage &shared_storage =
+      *reinterpret_cast<SharedStorage *>(shared_memory);
+
+  // two different views of smem
+  Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+                          smemLayoutS); // (bM, bN)
+  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+                          smemLayoutD); // (bN, bM)
+
+  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y); // (bM, bN)
+  Tensor gD = D(make_coord(_, _), blockIdx.y, blockIdx.x); // (bN, bM)
+
+  Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
+  Tensor tSsS = local_partition(sS, tS, threadIdx.x); // (ThrValM, ThrValN)
+  Tensor tDgD = local_partition(gD, tD, threadIdx.x);
+  Tensor tDsD = local_partition(sD, tD, threadIdx.x);
+
+  cute::copy(tSgS, tSsS); // LDGSTS
+
+  cp_async_fence();
+  cp_async_wait<0>();
+  __syncthreads();
+
+  cute::copy(tDsD, tDgD);
+}
+
 
 // This kernel performs a naive transpose operation on a matrix tile.
 // It uses CuTe tensors to partition global memory (gmem) into thread-local 
