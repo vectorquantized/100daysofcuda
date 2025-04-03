@@ -50,23 +50,23 @@ __global__ static void __launch_bounds__(256, 1)
       *reinterpret_cast<SharedStorage *>(shared_memory);
 
   // two different views of smem
-  Tensor sS = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+  auto sS = cute::make_tensor(cute::make_smem_ptr(shared_storage.smem.data()),
                           smemLayoutS); // (bM, bN)
-  Tensor sD = make_tensor(make_smem_ptr(shared_storage.smem.data()),
+  auto sD = cute::make_tensor(cute::make_smem_ptr(shared_storage.smem.data()),
                           smemLayoutD); // (bN, bM)
 
-  Tensor gS = S(make_coord(_, _), blockIdx.x, blockIdx.y); // (bM, bN)
-  Tensor gD = D(make_coord(_, _), blockIdx.y, blockIdx.x); // (bN, bM)
+  auto gS = S(cute::make_coord(cute::_, cute::_), blockIdx.x, blockIdx.y); // (bM, bN)
+  auto gD = D(cute::make_coord(cute::_, cute::_), blockIdx.y, blockIdx.x); // (bN, bM)
 
-  Tensor tSgS = local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
-  Tensor tSsS = local_partition(sS, tS, threadIdx.x); // (ThrValM, ThrValN)
-  Tensor tDgD = local_partition(gD, tD, threadIdx.x);
-  Tensor tDsD = local_partition(sD, tD, threadIdx.x);
+  auto tSgS = cute::local_partition(gS, tS, threadIdx.x); // (ThrValM, ThrValN)
+  auto tSsS = cute::local_partition(sS, tS, threadIdx.x); // (ThrValM, ThrValN)
+  auto tDgD = cute::local_partition(gD, tD, threadIdx.x);
+  auto tDsD = cute::local_partition(sD, tD, threadIdx.x);
 
   cute::copy(tSgS, tSsS); // LDGSTS
 
-  cp_async_fence();
-  cp_async_wait<0>();
+  cute::cp_async_fence();
+  cute::cp_async_wait<0>();
   __syncthreads();
 
   cute::copy(tDsD, tDgD);
