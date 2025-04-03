@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
         using AmpereConfig = GemmConfig<cutlass::arch::Sm80>;
         status = run_gemm<AmpereConfig>(M, N, K, alpha, beta);
     } else if (deviceProp.major ==7 && deviceProp.minor == 5) {
-        using AmpereConfig = GemmConfig<cutlass::arch::Sm75>;
-        status = run_gemm<AmpereConfig>(M, N, K, alpha, beta);
+        using TuringConfig = GemmConfig<cutlass::arch::Sm75>;
+        status = run_gemm<TuringConfig>(M, N, K, alpha, beta);
     } else {
         std::cerr << "Unsupported compute capability: "
                   << deviceProp.major << "." << deviceProp.minor << std::endl;
