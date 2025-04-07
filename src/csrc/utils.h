@@ -75,6 +75,40 @@ inline void print_vectors(const float* b_ref, const float* b_h, int size) {
             << std::endl;
 }
 
+template <typename T, typename GeneratorFunc>
+void initialize_batched_matrices_col_major(
+    T* data,
+    int batch_count,
+    int rows, int cols,
+    int ld, // leading dimension
+    int batch_stride,
+    GeneratorFunc generator // data generator function.
+) {
+    
+    for (int b_idx = 0; b_idx < batch_count; b_idx++) {
+        for (int col_idx = 0; col_idx < cols; col_idx++) {
+            for (int row_idx = 0; row_idx < rows; row_idx++) {
+                int idx = b_idx * batch_stride + col_idx * ld +  row_idx; // column major
+                data[idx] = generator(b_idx, row_idx, col_idx);
+            }
+        }
+    }
+}
+
+std::vector<size_t> generate_random_permutation(size_t size) {
+    std::vector<size_t> permutation(size);
+
+    // fill the permutation vector with the values 0, 1, 2, 3, ..., size-1
+    std::iota(permutation.begin(), permutation.end(), 0);
+    
+    std::random_device rd;
+    std::mt19937 g(rd());
+    
+    std::shuffle(permutation.begin(), permutation.end(), g);
+    
+    return permutation;
+}
+
 } //namespace cpu_utils
 
 // Macro definition
