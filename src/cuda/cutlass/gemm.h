@@ -6,7 +6,8 @@
 #include <cutlass/layout/matrix.h>
 #include <cutlass/util/reference/device/tensor_fill.h>
 #include <cutlass/core_io.h>
-#include "cutlass/gemm/device/gemm_array.h"
+#include <cutlass/gemm/device/gemm_array.h>
+#include <cutlass/gemm/device/gemm_batched.h>
 #include <vector>
 
 template<typename ArchTag_>
@@ -181,6 +182,42 @@ cutlass::Status run_gemm_batched_array(
         B, ldb,
         C, ldc,
         C, ldc,
+        {alpha, beta},
+        batch_count
+    });
+    return status;
+}
+
+template<typename Element>
+cutlass::Status run_gemm_batched(
+    int M, int N, int K, Element alpha, 
+    Element const* A, int lda,
+    int batch_stride_A,
+    Element const* B, int ldb, 
+    int batch_stride_B,
+    Element* C, int ldc,
+    int batch_stride_C,
+    Element beta,
+    int batch_count) {
+    
+    using Gemm = cutlass::gemm::device::GemmBatched<
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::ColumnMajor
+        >;
+
+    Gemm gemm_op;
+
+    cutlass::Status status = gemm_op({
+        {M, N, K},
+        {A, lda},
+        batch_stride_A,
+        {B, ldb},
+        batch_stride_B,
+        {C, ldc},
+        batch_stride_C,
+        {C, ldc},
+        batch_stride_C,
         {alpha, beta},
         batch_count
     });
