@@ -23,7 +23,8 @@ file(GLOB CPU_SOURCES ${PROJECT_SOURCE_DIR}/src/cpu/*.cpp)
 file(GLOB DAY_DIRS ${PROJECT_SOURCE_DIR}/src/day_*)
 
 # Set common CUDA compilation flags
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --ptxas-options=-v -lineinfo -O3")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --ptxas-options=-v -lineinfo -O3")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
 
 # Iterate over day_* directories to create individual targets
 foreach(DAY_DIR ${DAY_DIRS})

@@ -63,6 +63,33 @@ struct TiledGemmConfig {
     >;
 };
 
+template<typename ArchTag_>
+struct GemmReluConfig {
+    using ArchTag = ArchTag_;
+
+    using ThreadblockShape = cutlass::gemm::GemmShape<128, 128, 32>;
+    using WarpShape = cutlass::gemm::GemmShape<64, 64, 32>;
+    using InstructionShape = cutlass::gemm::GemmShape<16, 8, 16>;
+
+    using ElementA = cutlass::half_t;
+    using ElementB = cutlass::half_t;
+    using ElementC = cutlass::half_t;
+    using ElementAccumulator = float;
+
+    using LayoutA = cutlass::layout::RowMajor;
+    using LayoutB = cutlass::layout::RowMajor;
+    using LayoutC = cutlass::layout::RowMajor;
+
+    using EpilogueOp = cutlass::epilogue::thread::LinearCombinationRelu<
+        cutlass::half_t,
+        128 / cutlass::sizeof_bits<cutlass::half_t>::value,
+        float,
+        float
+    >;
+    static int const NumStages = 2;
+    using SwizzleThreadBlock = cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>;
+};
+
 template<typename Element, typename Layout>
 class InitPolicy {
 public:
@@ -115,7 +142,7 @@ public:
         auto tensor_view = cutlass::TensorView<Element, Layout>(
             tensor_ref.data(), tensor_ref.layout(), {rows, cols}
         );
-        cutlass::reference::device::TensorFillRandomGaussian(
+        cutlass::reference::device::TensorFillRandomUniform(
             tensor_view,
             seed,
             extent_low,
@@ -341,6 +368,7 @@ cutlass::Status run_gemm_split_k(
         typename Config::EpilogueOp
         >;
 
+        cutlass::Status status = cutlass::Status::kInvalid;
         cutlass::HostTensor<typename Config::ElementA, typename Config::LayoutA> A({M, K});
         cutlass::HostTensor<typename Config::ElementB, typename Config::LayoutB> B({K, N});
         cutlass::HostTensor<typename Config::ElementC, typename Config::LayoutC> C({M, N});
@@ -362,12 +390,67 @@ cutlass::Status run_gemm_split_k(
             cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
             Gemm gemm_op;
-            cutlass::Status status = gemm_op.initialize(arguments, workspace.get());
-            return status;
+            status = gemm_op.initialize(arguments, workspace.get());
         }
-
-        
-
+        return status;
 }
+
+template<typename Element, typename Config>
+cutlass::Status run_gemm_relu(
+    int M, int N, int K, 
+    Element alpha, Element beta,
+    const InitPolicy<typename Config::ElementA, typename Config::LayoutA>* init_policy_A = nullptr,
+    const InitPolicy<typename Config::ElementB, typename Config::LayoutB>* init_policy_B = nullptr,
+    const InitPolicy<typename Config::ElementC, typename Config::LayoutC>* init_policy_C = nullptr
+) {
+
+    
+    cutlass::gemm::GemmCoord problem_size(M, N, K);
+
+    using Gemm = cutlass::gemm::device::Gemm<
+        typename Config::ElementA,
+        typename Config::LayoutA,
+        typename Config::ElementB,
+        typename Config::LayoutB,
+        typename Config::ElementC,
+        typename Config::LayoutC,
+        typename Config::ElementAccumulator,
+        cutlass::arch::OpClassTensorOp,
+        typename Config::ArchTag,
+        typename Config::ThreadblockShape,
+        typename Config::WarpShape,
+        typename Config::InstructionShape,
+        typename Config::EpilogueOp,
+        typename Config::SwizzleThreadBlock,
+        Config::NumStages
+        >;
+
+        cutlass::Status status = cutlass::Status::kInvalid;
+        cutlass::HostTensor<typename Config::ElementA, typename Config::LayoutA> A({M, K});
+        cutlass::HostTensor<typename Config::ElementB, typename Config::LayoutB> B({K, N});
+        cutlass::HostTensor<typename Config::ElementC, typename Config::LayoutC> C({M, N});
+        if (init_policy_A != nullptr && init_policy_B != nullptr && init_policy_C != nullptr) {
+            init_policy_A->initialize(A.device_ref(), M, K);
+            init_policy_B->initialize(B.device_ref(), K, N);
+            init_policy_C->initialize(C.device_ref(), M, N);
+
+            typename Gemm::Arguments arguments{
+                problem_size,
+                A.device_ref(),
+                B.device_ref(),
+                C.device_ref(),
+                C.device_ref(),
+                {alpha, beta}};
+
+            size_t workspace_size = Gemm::get_workspace_size(arguments);
+            cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
+
+            Gemm gemm_op;
+            status = gemm_op.initialize(arguments, workspace.get());
+            
+        }
+        return status;
+}
+
 
 
