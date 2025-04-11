@@ -11,6 +11,7 @@
 #include <cutlass/core_io.h>
 #include <cutlass/gemm/device/gemm_array.h>
 #include <cutlass/gemm/device/gemm_batched.h>
+#include "../../cuda/cutlass/util.h"
 #include <vector>
 
 template<typename ArchTag_>
@@ -144,6 +145,39 @@ public:
         );
         cutlass::reference::device::TensorFillRandomUniform(
             tensor_view,
+            seed,
+            extent_low,
+            extent_high,
+            bits_less_than_one
+        );
+    }
+};
+
+template<typename Element, typename Layout>
+class UniformInitPolicyKernel : public InitPolicy<Element, Layout> {
+private:
+    uint64_t seed;
+    Element extent_low;
+    Element extent_high;
+    int bits_less_than_one;
+
+public:
+    UniformInitPolicyKernel(uint64_t seed_, Element extent_low_, Element extent_high_, int bits_less_than_one_)
+    : seed(seed_), extent_low(extent_low_), extent_high(extent_high_), bits_less_than_one(bits_less_than_one_)
+    {}
+
+    void initialize(cutlass::TensorRef<Element, Layout> tensor_ref, int rows, int cols) const {
+        auto tensor_view = cutlass::TensorView<Element, Layout>(
+            tensor_ref.data(), tensor_ref.layout(), {rows, cols}
+        );
+
+        int total_elements = rows * cols;
+        dim3 grid((total_elements + 255) / 256);
+        dim3 block(256);
+
+        uniform_random_fill<cutlass::half_t><<<grid, block>>>(
+            tensor_ref.data(),
+            total_elements,
             seed,
             extent_low,
             extent_high,

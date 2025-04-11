@@ -1,6 +1,9 @@
 #ifndef CUTLASS_UTIL_H
 #define CUTLASS_UTIL_H
 
+#include <cuda_runtime.h>
+#include <curand_kernel.h>
+
 #define CUTLASS_CHECK(status)                                                                    \
   {                                                                                              \
     cutlass::Status error = status;                                                              \
@@ -21,6 +24,54 @@ template <typename T> struct TransposeParams {
   TransposeParams(T *__restrict__ input_, T *__restrict__ output_, int M_, int N_)
       : input(input_), output(output_), M(M_), N(N_) {}
 };
+
+template<typename Element>
+struct ElementConverter {
+  static __device__ Element from_float(float f) {
+    return static_cast<Element>(f);
+  }
+
+  static __device__ float to_float(Element e) {
+    return static_cast<float>(e);
+  }
+};
+
+template<>
+struct ElementConverter<cutlass::half_t> {
+  static __device__ cutlass::half_t from_float(float f) {
+    return cutlass::half_t(f);
+  }
+  static __device__ float to_float(cutlass::half_t h) {
+    return float(h);
+  }
+};
+
+template<typename Element>
+__global__ void uniform_random_fill(
+  Element* input,
+  int size,
+  uint64_t seed,
+  Element low,
+  Element high,
+  int bits_less_than_one
+) {
+
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (idx < size) {
+    curandState state;
+    curand_init(seed + idx, 0, 0, &state);
+    float rnd = curand_uniform(&state);
+    float flow = ElementConverter<Element>::to_float(low);
+    float fhigh = ElementConverter<Element>::to_float(high);
+    float frange = high - low;
+    float fvalue = flow + frange * rnd;
+    if (bits_less_than_one == 0) {
+      fvalue = static_cast<float>(static_cast<int>(fvalue));
+    }
+    input[idx] = ElementConverter<Element>::from_float(fvalue);
+  }
+
+}
 
 //template <typename T> int benchmark(void (*transpose)(int M, int N, T* input, T* output), int M, int N, int iterations=10, bool verify=true) {
 // template <typename T, bool isTranspose = true, bool isFMA = false> int benchmark(void (*transpose)(TransposeParams<T> params), int M, int N, int iterations=10, bool verify=true) {
