@@ -22,7 +22,11 @@ int main(int argc, char* argv[]) {
     auto init_policy_C = std::make_unique<UniformInitPolicyKernel<cutlass::half_t, cutlass::layout::RowMajor>>(
         2082, -4.0_hf, 4.0_hf, 2);
 
-    using AmpereReluConfig = GemmConfigWithEpilogue<cutlass::arch::Sm80>;
+    using EpilogueOp_ = LinearCombinationSwish<cutlass::half_t, 
+                            128 / cutlass::sizeof_bits<cutlass::half_t>::value,
+                            float, float
+                            >;
+    using AmpereReluConfig = GemmConfigWithEpilogue<cutlass::arch::Sm80, EpilogueOp_>;
     cutlass::Status status = run_gemm_with_activation<float, AmpereReluConfig>(
         M, N, K, 
         alpha, beta,

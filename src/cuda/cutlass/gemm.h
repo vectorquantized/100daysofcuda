@@ -2,6 +2,7 @@
 
 #include <cutlass/numeric_types.h>
 #include <cutlass/cutlass.h>
+#include <cutlass/fast_math.h>
 #include <cutlass/gemm_coord.h>
 #include <cutlass/gemm/device/gemm.h>
 #include <cutlass/util/host_tensor.h>
@@ -11,6 +12,7 @@
 #include <cutlass/core_io.h>
 #include <cutlass/gemm/device/gemm_array.h>
 #include <cutlass/gemm/device/gemm_batched.h>
+#include <cutlass/array.h>
 #include "../../cuda/cutlass/util.h"
 #include <vector>
 
@@ -64,8 +66,16 @@ struct TiledGemmConfig {
     >;
 };
 
-template<typename ArchTag_>
-struct GemmReluConfig {
+template<
+    typename ArchTag_,
+    typename EpilogueOp_= cutlass::epilogue::thread::LinearCombinationRelu<
+    cutlass::half_t,
+    128 / cutlass::sizeof_bits<cutlass::half_t>::value,
+    float,
+    float
+    >
+>
+struct GemmConfigWithEpilogue {
     using ArchTag = ArchTag_;
 
     using ThreadblockShape = cutlass::gemm::GemmShape<128, 128, 32>;
@@ -81,12 +91,7 @@ struct GemmReluConfig {
     using LayoutB = cutlass::layout::RowMajor;
     using LayoutC = cutlass::layout::RowMajor;
 
-    using EpilogueOp = cutlass::epilogue::thread::LinearCombinationRelu<
-        cutlass::half_t,
-        128 / cutlass::sizeof_bits<cutlass::half_t>::value,
-        float,
-        float
-    >;
+    using EpilogueOp = EpilogueOp_;
     static int const NumStages = 2;
     using SwizzleThreadBlock = cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<>;
 };
@@ -430,7 +435,7 @@ cutlass::Status run_gemm_split_k(
 }
 
 template<typename Element, typename Config>
-cutlass::Status run_gemm_relu(
+cutlass::Status run_gemm_with_activation(
     int M, int N, int K, 
     Element alpha, Element beta,
     const InitPolicy<typename Config::ElementA, typename Config::LayoutA>* init_policy_A = nullptr,
@@ -485,6 +490,59 @@ cutlass::Status run_gemm_relu(
         }
         return status;
 }
+
+template<
+    typename ElementOutput_,
+    int Count,
+    typename ElementAccumulator_,
+    typename ElementCompute_
+>
+class LinearCombinationSwish {
+public:
+    using ElementAccumulator = ElementAccumulator_;
+    using ElementCompute = ElementCompute_;
+    using ElementOutput = ElementOutput_;
+    using ElementVector = cutlass::Array<ElementOutput, Count>;
+
+    static int const kCount = Count;
+    struct Params {
+        ElementCompute alpha;
+        ElementCompute beta;
+    };
+private:
+    Params params_;
+
+public:
+    CUTLASS_HOST_DEVICE LinearCombinationSwish(Params const &params) : params_(params) {}
+    CUTLASS_HOST_DEVICE bool is_source_needed() const {
+        return params_.beta != ElementCompute(0);
+    }
+    CUTLASS_DEVICE void operator() (
+        ElementVector &d,
+        ElementAccumulator const &accumulator,
+        ElementVector const &source,
+        ElementCompute alpha_scalar = ElementCompute(1),
+        ElementCompute beta_scalar = ElementCompute(1)) const {
+        
+        CUTLASS_PRAGMA_UNROLL
+        for(int i=0; i<Count; ++i) {
+            ElementCompute compute(accumulator);
+            compute = compute * params_.alpha * alpha_scalar;
+            if (params_.beta != ElementCompute(0)) {
+                    ElementCompute compute_source(source[i]);
+                    compute = compute + params_.beta * beta_scalar * compute_source;
+                }
+            compute = apply_swish(compute);
+            d[i] = ElementOutput(compute);
+        }
+        
+    }
+
+private:
+    CUTLASS_DEVICE ElementCompute apply_swish(ElementCompute x) const {
+        return x / (ElementCompute(1) + cutlass::fast_exp(-x));
+    }
+};
 
 
 
