@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
     };
     
     cpu_utils::initialize_batched_matrices_col_major(host_A.data(), batch_count, L, D, lda, lda * D, init_A);
-    cpu_utils::initialize_batched_matrices_col_major(host_B.data(), batch_count, L, D, ldb, ldb * L, init_B);
+    cpu_utils::initialize_batched_matrices_col_major(host_B.data(), batch_count, L, D, ldb, ldb * D, init_B);
     cpu_utils::initialize_batched_matrices_col_major(host_C.data(), batch_count, L, L, ldc, ldc * L, init_C);
 
     float* A;
