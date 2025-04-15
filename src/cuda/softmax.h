@@ -2,6 +2,7 @@
 #define SOFTMAX_H
 
 #include <cuda_runtime.h>
+#include <float.h>
 
 template<typename T, typename EpsType = T>
 __global__ void batched_online_softmax(const T* __restrict__ input, 
@@ -15,7 +16,7 @@ __global__ void batched_online_softmax(const T* __restrict__ input,
         int seq_idx = row % L;
 
         T thread_max = -FLT_MAX;
-        T norm = static_cast<T(0);
+        T norm = static_cast<T>(0);
         int base_idx = batch_idx * L * D + seq_idx * D;
 
         for(int elem_idx = 0; elem_idx < D; ++elem_idx) {
@@ -27,7 +28,7 @@ __global__ void batched_online_softmax(const T* __restrict__ input,
             norm += expf(static_cast<float>(curr_value - thread_max));
         }
 
-        for(int elem_idx = 0; elem_idx < D; elem_idx) {
+        for(int elem_idx = 0; elem_idx < D; ++elem_idx) {
             output[base_idx + elem_idx] = expf(static_cast<float>(input[base_idx + elem_idx] - thread_max)) / (norm + static_cast<T>(epsilon));
         }
     }

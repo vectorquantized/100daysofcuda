@@ -26,8 +26,8 @@ int main(int argc, char* argv[]) {
                             128 / cutlass::sizeof_bits<cutlass::half_t>::value,
                             float, float
                             >;
-    using AmpereReluConfig = GemmConfigWithEpilogue<cutlass::arch::Sm80, EpilogueOp_>;
-    cutlass::Status status = run_gemm_with_activation<float, AmpereReluConfig>(
+    using AmpereSwishConfig = GemmConfigWithEpilogue<cutlass::arch::Sm80, EpilogueOp_>;
+    cutlass::Status status = run_gemm_with_activation<float, AmpereSwishConfig>(
         M, N, K, 
         alpha, beta,
         init_policy_A.get(),

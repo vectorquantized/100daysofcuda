@@ -14,6 +14,7 @@
 #include <cutlass/gemm/device/gemm_batched.h>
 #include <cutlass/array.h>
 #include "../../cuda/cutlass/util.h"
+#include "../../cuda/softmax.h"
 #include <vector>
 
 template<typename ArchTag_>
@@ -376,6 +377,63 @@ cutlass::Status run_gemm_batched(
         {alpha, beta},
         batch_count
     });
+    return status;
+}
+
+template<typename Element>
+cutlass::Status attention_scores(
+    int M, int N, int K, Element alpha, 
+    Element const* A, int lda,
+    int batch_stride_A,
+    Element const* B, int ldb, 
+    int batch_stride_B,
+    Element* C, int ldc,
+    int batch_stride_C,
+    Element beta,
+    int batch_count) {
+    
+    using Gemm = cutlass::gemm::device::GemmBatched<
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::RowMajor,
+        Element, cutlass::layout::ColumnMajor
+        >;
+
+    Gemm gemm_op;
+
+    cutlass::Status status = gemm_op({
+        {M, N, K},
+        {A, lda},
+        batch_stride_A,
+        {B, ldb},
+        batch_stride_B,
+        {C, ldc},
+        batch_stride_C,
+        {C, ldc},
+        batch_stride_C,
+        {alpha, beta},
+        batch_count
+    });
+
+    float epsilon = 1e-5f;  // Small value for numerical stability
+
+    // Configure kernel launch parameters
+    int threads_per_block = 256;
+    int num_rows = batch_count * M;  // Total number of rows across all batches
+    int blocks_needed = (num_rows + threads_per_block - 1) / threads_per_block;
+
+    dim3 grid(blocks_needed);
+    dim3 block(threads_per_block);
+
+    // Launch the softmax kernel
+    batched_online_softmax<float><<<grid, block>>>(
+        C,   // Input from GEMM (Q*K^T)
+        C,   // Output (same as input for in-place operation)
+        batch_count,       // Number of batches
+        M,                 // Sequence length (rows per batch)
+        N,                 // Dimension to normalize over (columns per row)
+        epsilon            // Small value for numerical stability
+    );
+
     return status;
 }
 
