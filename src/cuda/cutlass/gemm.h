@@ -433,6 +433,96 @@ cutlass::Status attention_scores(
         N,                 // Dimension to normalize over (columns per row)
         epsilon            // Small value for numerical stability
     );
+    return status;
+}
+
+template<typename Element>
+cutlass::Status attention(
+    int M, int N, int K, Element alpha, 
+    Element const* A, int lda,
+    int batch_stride_A,
+    Element const* B, int ldb, 
+    int batch_stride_B,
+    Element* C, int ldc,
+    int batch_stride_C,
+    Element const* D, int ldd,
+    int batch_stride_D,
+    Element beta,
+    int batch_count) {
+    
+    using Gemm = cutlass::gemm::device::GemmBatched<
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::RowMajor,
+        Element, cutlass::layout::ColumnMajor
+        >;
+
+    Gemm gemm_op;
+
+    cutlass::Status status = gemm_op({
+        {M, N, K},
+        {A, lda},
+        batch_stride_A,
+        {B, ldb},
+        batch_stride_B,
+        {C, ldc},
+        batch_stride_C,
+        {C, ldc},
+        batch_stride_C,
+        {alpha, beta},
+        batch_count
+    });
+
+     // Synchronize and check errors after softmax kernel launch.
+     cudaError_t cudaStatus = cudaDeviceSynchronize();
+     if (cudaStatus != cudaSuccess) {
+         std::cerr << "Softmax kernel error: " << cudaGetErrorString(cudaStatus) << std::endl;
+         return cutlass::Status::kErrorInternal;
+     }
+
+    float epsilon = 1e-5f;  // Small value for numerical stability
+
+    // Configure kernel launch parameters
+    int threads_per_block = 256;
+    int num_rows = batch_count * M;  // Total number of rows across all batches
+    int blocks_needed = (num_rows + threads_per_block - 1) / threads_per_block;
+
+    dim3 grid(blocks_needed);
+    dim3 block(threads_per_block);
+
+    // Launch the softmax kernel
+    batched_online_softmax<float><<<grid, block>>>(
+        C,   // Input from GEMM (Q*K^T)
+        C,   // Output (same as input for in-place operation)
+        batch_count,       // Number of batches
+        M,                 // Sequence length (rows per batch)
+        N,                 // Dimension to normalize over (columns per row)
+        epsilon            // Small value for numerical stability
+    );
+
+    using Gemm_attn = cutlass::gemm::device::GemmBatched<
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::ColumnMajor,
+        Element, cutlass::layout::ColumnMajor
+        >;
+
+    Gemm_attn gemm_attn_op;
+
+    // C: B, M, N and V: B, M, K.
+    // output: B, M, K
+    // problem size should be: M, K, N
+    status = gemm_attn_op({
+        {M, K, N},
+        {C, ldc}, // Left-hand operand: softmax scores
+        batch_stride_C,
+        {D, ldd}, // Right-hand operand: V matrix
+        batch_stride_D,
+        {C, ldc}, // Output: in-place in C (or use another tensor if desired)
+        batch_stride_C,
+        {C, ldc}, // Accumulator
+        batch_stride_C,
+        {alpha, beta},
+        batch_count
+    });
 
     return status;
 }
