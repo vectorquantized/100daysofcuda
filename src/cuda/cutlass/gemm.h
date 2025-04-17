@@ -633,7 +633,8 @@ cutlass::Status run_gemm_with_activation(
             cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
             Gemm gemm_op;
-            status = gemm_op.initialize(arguments, workspace.get());
+            gemm_op.initialize(arguments, workspace.get());
+            status = gemm_op();                
             
         }
         return status;
@@ -686,6 +687,72 @@ public:
         
     }
 
+private:
+    CUTLASS_DEVICE ElementCompute apply_swish(ElementCompute x) const {
+        return x / (ElementCompute(1) + cutlass::fast_exp(-x));
+    }
+};
+
+
+template<
+    typename ElementOutput_,
+    int Count,
+    typename ElementAccumulator_,
+    typename ElementCompute_
+>
+class LinearCombinationSwiglu {
+public:
+    using ElementAccumulator = ElementAccumulator_;
+    using ElementCompute = ElementCompute_;
+    using ElementOutput = ElementOutput_;
+    using ElementVector = cutlass::Array<ElementOutput, Count>;
+
+    static int const kCount = Count;
+    struct Params {
+        ElementCompute alpha;
+        ElementCompute beta;
+    };
+private:
+    Params params_;
+
+public:
+    CUTLASS_HOST_DEVICE LinearCombinationSwiglu(Params const &params) : params_(params) {}
+    CUTLASS_HOST_DEVICE bool is_source_needed() const {
+        return params_.beta != ElementCompute(0);
+    }
+    CUTLASS_HOST_DEVICE
+    void set_k_partition(int k_partition, int partitions_k) {}
+    CUTLASS_HOST_DEVICE ElementVector operator() (ElementAccumulator const &accumulator ) const {
+        ElementVector dummy_source;             
+        return (*this)(
+            accumulator,
+            dummy_source,
+            ElementCompute(1),    // alpha_scalar
+            ElementCompute(0)     // beta_scalar
+        );
+    }
+    CUTLASS_DEVICE ElementVector operator()(
+        ElementAccumulator const &accumulator,
+        ElementVector     const &source,
+        ElementCompute          alpha_scalar = ElementCompute(1),
+        ElementCompute          beta_scalar  = ElementCompute(1)
+    ) const {
+        
+        ElementVector d;
+        CUTLASS_PRAGMA_UNROLL
+        for (int i = 0; i < Count; ++i) {
+        auto up_i   = accumulator[i];
+        auto gate_i = accumulator[i + Count];
+        auto s      = gate_i / (ElementCompute(1) + fast_exp(-gate_i));
+        ElementCompute m = up_i * s * params_.alpha * alpha_scalar;
+        if (params_.beta != ElementCompute(0)) {
+            m += params_.beta * beta_scalar * source[i];
+        }
+        d[i] = ElementOutput(m);
+        }
+
+        return d;
+    }
 private:
     CUTLASS_DEVICE ElementCompute apply_swish(ElementCompute x) const {
         return x / (ElementCompute(1) + cutlass::fast_exp(-x));
