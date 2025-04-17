@@ -95,6 +95,29 @@ void initialize_batched_matrices_col_major(
     }
 }
 
+template <typename T, typename GeneratorFunc>
+void initialize_batched_multi_headed_matrices_col_major(
+    T* data,
+    int batch_count,
+    int num_heads,
+    int rows, int cols,
+    int ld, // leading dimension
+    int batch_stride,
+    GeneratorFunc generator // data generator function.
+) {
+    
+    for (int b_idx = 0; b_idx < batch_count; b_idx++) {
+        int batch = b_idx / num_heads;
+        int head = b_idx % num_heads;
+        for (int col_idx = 0; col_idx < cols; col_idx++) {
+            for (int row_idx = 0; row_idx < rows; row_idx++) {
+                int idx = b_idx * batch_stride + col_idx * ld +  row_idx; // column major
+                data[idx] = generator(batch, head, row_idx, col_idx);
+            }
+        }
+    }
+}
+
 std::vector<size_t> generate_random_permutation(size_t size) {
     std::vector<size_t> permutation(size);
 
