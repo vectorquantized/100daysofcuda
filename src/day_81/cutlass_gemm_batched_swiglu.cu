@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
     int ldgate = K;
     int ldout = M;
     int batch_stride_A = lda * K;
-    int batch_stride_up = 0;
-    int batch_stride_gate = 0;
+    int batch_stride_up = 0; // weights are shared across all batches.
+    int batch_stride_gate = 0; // if I don't do this then I'd have to replicate up and gate weights.
     int batch_stride_out = ldout * N;
 
     int count_A = batch_count * lda * K;
