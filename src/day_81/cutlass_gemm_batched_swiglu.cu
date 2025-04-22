@@ -123,6 +123,8 @@ int main(int argc, char* argv[]) {
     dim3 block_dim(block_size);
     dim3 grid_dim(CEIL_DIV(num_elements, block_size));
     
+    swiglu<float><<<grid_dim, block_dim>>>(y, z, out, batch_count, M, N);
+
     CUDA_ERROR_CHECK(cudaGetLastError());
     CUDA_ERROR_CHECK(cudaDeviceSynchronize());
 
