@@ -535,7 +535,6 @@ cutlass::Status run_gemm_split_k(
     const InitPolicy<typename Config::ElementA, typename Config::LayoutA>* init_policy_A = nullptr,
     const InitPolicy<typename Config::ElementB, typename Config::LayoutB>* init_policy_B = nullptr,
     const InitPolicy<typename Config::ElementC, typename Config::LayoutC>* init_policy_C = nullptr) {
-
     
     cutlass::gemm::GemmCoord problem_size(M, N, K);
 
@@ -711,6 +710,9 @@ public:
     struct Params {
         ElementCompute alpha;
         ElementCompute beta;
+        ElementOutput const* up_ptr;
+        int ldm;
+        int batch_stride;
     };
 private:
     Params params_;
@@ -720,17 +722,8 @@ public:
     CUTLASS_HOST_DEVICE bool is_source_needed() const {
         return params_.beta != ElementCompute(0);
     }
-    CUTLASS_HOST_DEVICE
-    void set_k_partition(int k_partition, int partitions_k) {}
-    CUTLASS_HOST_DEVICE ElementVector operator() (ElementAccumulator const &accumulator ) const {
-        ElementVector dummy_source;             
-        return (*this)(
-            accumulator,
-            dummy_source,
-            ElementCompute(1),    // alpha_scalar
-            ElementCompute(0)     // beta_scalar
-        );
-    }
+    // CUTLASS_HOST_DEVICE
+    // void set_k_partition(int k_partition, int partitions_k) {}
     CUTLASS_DEVICE ElementVector operator()(
         ElementAccumulator const &accumulator,
         ElementVector     const &source,
@@ -741,14 +734,14 @@ public:
         ElementVector d;
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < Count; ++i) {
-        auto up_i   = accumulator[i];
-        auto gate_i = accumulator[i + Count];
-        auto s      = gate_i / (ElementCompute(1) + fast_exp(-gate_i));
-        ElementCompute m = up_i * s * params_.alpha * alpha_scalar;
-        if (params_.beta != ElementCompute(0)) {
-            m += params_.beta * beta_scalar * source[i];
-        }
-        d[i] = ElementOutput(m);
+            ElementOutput up_val = params_.up_ptr[i];
+            auto gate_i = accumulator[i];
+            auto s      = gate_i / (ElementCompute(1) + fast_exp(-gate_i));
+            ElementCompute m = up_val * s * params_.alpha * alpha_scalar;
+            if (params_.beta != ElementCompute(0)) {
+                m += params_.beta * beta_scalar * source[i];
+            }
+            d[i] = ElementOutput(m);
         }
 
         return d;
@@ -758,6 +751,122 @@ private:
         return x / (ElementCompute(1) + cutlass::fast_exp(-x));
     }
 };
+
+
+template<
+  typename ElementOutput,
+  int      Count,
+  typename ElementAccumulator,
+  typename ElementCompute
+>
+struct SwigluEpilogue : cutlass::epilogue::thread::LinearCombination<
+      ElementOutput, Count, ElementAccumulator, ElementCompute> {
+
+    using Base    = cutlass::epilogue::thread::LinearCombination<
+                    ElementOutput, Count, ElementAccumulator, ElementCompute
+                    >;
+    using FragmentAccumulator = typename Base::FragmentAccumulator;
+    using FragmentSource      = typename Base::FragmentSource;
+    using FragmentOutput      = typename Base::FragmentOutput;
+
+    struct Params : Base::Params {
+        ElementOutput const* up_ptr;   // ptr to “up” buffer
+        int                   ldm;      // leading dim of up
+        int                   batch_stride; // batch stride of up
+    };
+private:
+    Params params_;    
+public:
+    CUTLASS_HOST_DEVICE
+    SwigluEpilogue(Params const &p)
+    : Base({p.alpha, p.beta}), params_(p) {}
+
+    CUTLASS_DEVICE
+    bool is_source_needed() const { return true; }
+
+    // If you ever split-K, you could implement set_k_partition here.
+    CUTLASS_DEVICE
+    void set_k_partition(int, int) {}
+    using Base::operator();
+    // acc   = gate fragment
+    // src   = up fragment
+    // alpha = your scalar alpha,  beta=unused since is_source_needed==true
+    CUTLASS_DEVICE
+    FragmentOutput operator()(
+        FragmentAccumulator const &accum,
+        FragmentSource      const &src
+    ) const {
+      FragmentOutput dst;
+      for (int i = 0; i < Count; ++i) {
+        ElementCompute g     = accum[i];
+        ElementCompute swish = g / (ElementCompute(1) + cutlass::fast_exp(-g));
+        dst[i] = ElementOutput(src[i] * swish * params_.alpha);
+      }
+      return dst;
+    }
+    CUTLASS_DEVICE
+    FragmentOutput
+    operator()( FragmentAccumulator const &accum,
+                FragmentSource      const &src,
+                ElementCompute            alpha,
+                ElementCompute            beta   ) const
+    {
+        FragmentOutput dst;
+        for (int i = 0; i < Count; ++i) {
+        ElementCompute g     = accum[i];
+        ElementCompute swish = g / (ElementCompute(1) + cutlass::fast_exp(-g));
+        dst[i] = ElementOutput(src[i] * swish * alpha);
+        }
+        return dst;
+    }
+
+};
+
+template<typename T, typename EpilogueOp>
+cutlass::Status run_fused_gemm_batched (
+    int M, int N, int K,
+    float alpha,
+    const T* A, int lda, int batch_stride_A,
+    const T* B, int ldb, int batch_stride_B,
+    const T* C, int ldc, int batch_stride_C,
+    T* out, int ldout, int batch_stride_out,
+    float beta,
+    int batch_count,
+    typename EpilogueOp::Params const &epilogue_params
+) {
+
+    using ElementAccumulator = float;
+    using Gemm = cutlass::gemm::device::GemmBatched<
+        T, cutlass::layout::ColumnMajor,
+        T, cutlass::layout::ColumnMajor,
+        T, cutlass::layout::ColumnMajor,
+        float,                                // accumulator
+        cutlass::arch::OpClassTensorOp,
+        cutlass::arch::Sm80,
+        cutlass::gemm::GemmShape<128,128,32>,
+        cutlass::gemm::GemmShape<32,32,32>,
+        cutlass::gemm::GemmShape<16,8,8>,
+        EpilogueOp
+    >;
+
+    typename Gemm::Arguments args(
+        { M, N, K },
+        { A,      lda }, batch_stride_A,    // input
+        { B,  ldb }, batch_stride_B,        // B-block (gate projection)
+        { C, ldc }, batch_stride_C,         // C-block *as source* (up projection)
+        { out,    ldout }, batch_stride_out,// D-block = output
+        epilogue_params,
+        batch_count
+    );
+
+    size_t workspace_bytes = Gemm::get_workspace_size(args);
+    cutlass::device_memory::allocation<uint8_t> workspace(workspace_bytes);
+
+    Gemm gemm_op;
+    gemm_op.initialize(args, workspace.get());
+    auto status = gemm_op();
+    return status;
+}
 
 
 
