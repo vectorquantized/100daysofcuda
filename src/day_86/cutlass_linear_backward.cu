@@ -101,6 +101,35 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    // --- dgrad computation: dX = dY * W ---
+    // Allocate and copy weight matrix W (shape N×K) from host_B
+    float* W;
+    CUDA_ERROR_CHECK(cudaMalloc(&W, N * K * sizeof(float)));
+    CUDA_ERROR_CHECK(cudaMemcpy(W, host_B.data(), N * K * sizeof(float), cudaMemcpyHostToDevice));
+    // Allocate output buffer dX (shape B×M×K)
+    float* dX;
+    int count_dX = batch_count * M * K;
+    CUDA_ERROR_CHECK(cudaMalloc(&dX, count_dX * sizeof(float)));
+    // Run batched GEMM: (M×N) * (N×K) = (M×K)
+    status = run_gemm_batched<float>(
+        M, K, N,
+        1.0f,
+        A, lda, batch_stride_A,   // A: dY (B×M×N)
+        W, K, 0,                 // B: W (N×K), replicated
+        dX, K, M * K,            // C: dX (B×M×K)
+        0.0f,
+        batch_count
+    );
+    cudaError_t cudaStatus2 = cudaDeviceSynchronize();
+    if (cudaStatus2 != cudaSuccess) {
+        std::cerr << "CUDA error in dgrad: " << cudaGetErrorString(cudaStatus2) << std::endl;
+    }
+    if(status != cutlass::Status::kSuccess) {
+        std::cout << "dgrad GEMM ERROR: " << static_cast<int>(status) << std::endl;
+        return -1;
+    }
+    cudaFree(W);
+    cudaFree(dX);
     cudaFree(A);
     cudaFree(B);
     cudaFree(C);
