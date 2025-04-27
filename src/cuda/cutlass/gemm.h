@@ -922,5 +922,46 @@ cutlass::Status run_mqa_looped(
   return cutlass::Status::kSuccess;
 }
 
+// MQA batched-GEMM: Q[b,n] ⋅ K[b].T → Scores[b,n]
+// Q: array of pointers to (L×D) matrices in ColumnMajor
+// K: array of pointers to (L×D) matrices in RowMajor (transposed via opB)
+// Scores: array of pointers to (L×L) matrices in ColumnMajor
+template<
+  typename Element,
+  int B,    // batch size
+  int N,    // # heads per batch
+  int L,    // sequence length
+  int D     // head-dimension
+>
+cutlass::Status run_multi_query_attention_gemm(
+  Element const* const* Q,      // array of device pointers to Q[b,n]
+  Element const* const* K,      // array of device pointers to K[b]
+  Element* const* Scores        // array of device pointers to output scores
+) {
+  using GemmMQ = cutlass::gemm::device::GemmArray<
+    Element, cutlass::layout::ColumnMajor,    // A = Q[b,n] as (L×D), col-major
+    Element, cutlass::layout::RowMajor,       // B = K[b]   as (L×D), row-major
+    Element, cutlass::layout::ColumnMajor     // C = scores as (L×L), col-major
+  >;
+
+  GemmMQ gemm_op;
+
+  typename GemmMQ::Arguments args(
+    { L, L, D },                          // problem size: M=L, N=L, K=D
+    Q, L,                                 // array of A-ptrs + lda
+    K, D,                                 // array of B-ptrs + ldb
+    Scores, L,                            // array of C-ptrs + ldc
+    Scores, L,                            // array of D-ptrs + ldd (in-place)
+    { Element(1), Element(0) },           // alpha=1, beta=0
+    B * N                               // batch_count
+  );
+
+  cutlass::Status status = gemm_op.initialize(args);
+  if (status != cutlass::Status::kSuccess) {
+    return status;
+  }
+  return gemm_op();
+}
+
 
 
