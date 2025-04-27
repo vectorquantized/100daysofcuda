@@ -963,5 +963,108 @@ cutlass::Status run_multi_query_attention_gemm(
   return gemm_op();
 }
 
+template<typename Element>
+cutlass::Status run_mqa_looped_full(
+    int B, int N, int L, int D,
+    Element const* Q,
+    Element const* K,
+    Element const* V,
+    Element * Scores,
+    Element * Output,
+    Element alpha = Element(1),
+    Element beta  = Element(0)
+) {
+  using GemmQK = cutlass::gemm::device::GemmBatched<
+      Element, cutlass::layout::ColumnMajor,  // A = Q[b] as (N*L × D)
+      Element, cutlass::layout::RowMajor,     // B = K[b] as (L×D) → transpose
+      Element, cutlass::layout::ColumnMajor   // C = Scores[b] as (N*L × L)
+  >;
+
+  using GemmVO = cutlass::gemm::device::GemmBatched<
+      Element, cutlass::layout::ColumnMajor,  // A = Scores[b] as (N*L × L)
+      Element, cutlass::layout::RowMajor,     // B = V[b]      as (L×D)
+      Element, cutlass::layout::ColumnMajor   // C = Output[b] as (N*L × D)
+  >;
+
+  GemmQK gemm_qk_op;
+  GemmVO gemm_vo_op;
+  cutlass::Status status;
+
+  // Strides (in elements)
+  int64_t strideQ = int64_t(N) * L * D;   // Q[b] block
+  int64_t strideK =     int64_t(L) * D;   // K[b] block
+  int64_t strideS = int64_t(N) * L * L;   // Scores[b] block
+  int64_t strideV =     int64_t(L) * D;   // V[b] block
+  int64_t strideO = int64_t(N) * L * D;   // Output[b] block
+
+  for (int b = 0; b < B; ++b) {
+    // Base pointers for this batch
+    auto ptrQ = Q + b * strideQ;
+    auto ptrK = K + b * strideK;
+    auto ptrV = V + b * strideV;
+    auto ptrS = Scores + b * strideS;
+    auto ptrO = Output+ b * strideO;
+
+    // QK^T → Scores (we fuse heads N into strided batch)
+    {
+      typename GemmQK::Arguments args(
+        { L, L, D },
+        { ptrQ, L }, L*D,
+        { ptrK, D }, 0,       // reuse same K[b] for all N
+        { ptrS, L }, L,
+        { ptrS, L }, L,
+        { alpha, beta },
+        N
+      );
+
+      status = gemm_qk_op.initialize(args);
+      if (status != cutlass::Status::kSuccess) return status;
+      status = gemm_qk_op();
+      if (status != cutlass::Status::kSuccess) return status;
+    }
+
+    // In-place softmax over each of the N score-matrices:
+    {
+        int rows_per_head    = L;        // each head has L rows
+        int cols_per_row     = L;        // we softmax over these L scores
+        int num_head_matrices = N;       // how many L×L blocks in this batch
+        
+        int total_rows  = num_head_matrices * rows_per_head;      // N·L
+        int total_elems = total_rows * cols_per_row;              // N·L·L
+        int threads     = 256;
+        int blocks      = (total_elems + threads - 1) / threads;
+        
+        batched_online_softmax<float><<<blocks, threads>>>(
+            ptrS,               // input pointer (Scores)
+            ptrS,               // output in-place
+            num_head_matrices,
+            rows_per_head,
+            cols_per_row,
+            1e-6f
+        );
+    }
+
+    // Softmax(scores) × V → Output
+    {
+      typename GemmVO::Arguments args(
+        { L, D, L },     // M=L (seq len), N=D, K=L
+        { ptrS, L }, L*L,     // each head’s softmax L×L
+        { ptrV, D }, 0,       // reuse same V[b] for all N
+        { ptrO, D }, D,
+        { ptrO, D }, D,
+        { Element(1), Element(0) },
+        N
+      );
+
+      status = gemm_vo_op.initialize(args);
+      if (status != cutlass::Status::kSuccess) return status;
+      status = gemm_vo_op();
+      if (status != cutlass::Status::kSuccess) return status;
+    }
+  }
+
+  return cutlass::Status::kSuccess;
+}
+
 
 
