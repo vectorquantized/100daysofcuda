@@ -868,5 +868,59 @@ cutlass::Status run_fused_gemm_batched (
     return status;
 }
 
+template<typename Element>
+cutlass::Status run_mqa_looped(
+    int B, int N, int L, int D,
+    Element const* Q,
+    Element const* K,
+    Element * Scores,
+    Element alpha = Element(1),
+    Element beta  = Element(0)
+) {
+  using Gemm = cutlass::gemm::device::GemmBatched<
+      Element, cutlass::layout::ColumnMajor,  // A = Q[b] as (N*L × D)
+      Element, cutlass::layout::RowMajor,     // B = K[b] as (L×D) transpose
+      Element, cutlass::layout::ColumnMajor   // C = Scores[b] as (N*L × L)
+  >;
+
+  Gemm gemm_op;
+  cutlass::Status status;
+
+  // Strides between successive batches:
+  int64_t strideQ = int64_t(N) * L * D;      // elements in one Q[b] block
+  int64_t strideK = int64_t(L) * D;          // elements in one K[b] block
+  int64_t strideS = int64_t(N) * L * L;      // elements in one Scores[b] block
+
+  for (int b = 0; b < B; ++b) {
+    // Offsets into the big flat buffers:
+    auto ptrQ = Q + b * strideQ;
+    auto ptrK = K + b * strideK;
+    auto ptrS = Scores + b * strideS;
+
+    // Each head is a separate GEMM of size (L×D) × (D×L):
+    // we fuse the heads into a single strided batch of N GEMMs
+    typename Gemm::Arguments args(
+      { L, L, D },
+      { ptrQ, L }, int64_t(L) * D,     // A tensor, stride between batches
+      { ptrK, D }, 0,                  // B tensor, stride (reuse same K for all N heads)
+      { ptrS, L }, int64_t(L) * L,     // C tensor, stride between batches
+      { ptrS, L }, int64_t(L) * L,     // D tensor (same as C for in-place)
+      { alpha, beta },                 // Epilogue
+      N                               // batch_count
+    );
+
+    status = gemm_op.initialize(args);
+    if (status != cutlass::Status::kSuccess) {
+        return status;
+    }
+    status = gemm_op();
+    if (status != cutlass::Status::kSuccess) {
+      return status;
+    }
+  }
+
+  return cutlass::Status::kSuccess;
+}
+
 
 
