@@ -6,6 +6,8 @@
 #define WIDTH 1024
 #define HEIGHT 1024
 
+// Tutorial: https://raytracing.github.io/books/RayTracingInOneWeekend.html#addingasphere/creatingourfirstraytracedimage
+
 __device__ float3 operator*(float s, const float3& v) {
     return make_float3(s * v.x, s * v.y, s * v.z);
 }
