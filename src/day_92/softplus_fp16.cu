@@ -5,11 +5,14 @@
 #include "cuda/cuda_utils.h"
 #include "csrc/timing_utils.h"
 #include "cuda/tensor.h"
+#include <mma.h>
+#include <cuda_fp16.h>
+using namespace nvcuda;
 
 #define NUM_THREADS 256
 
 
-__global__ void softplus(const float* input, float* output, size_t B, size_t L, size_t D) {
+__global__ void softplus(const half* input, float* output, size_t B, size_t L, size_t D) {
     int batch_seq_idx = blockIdx.y;
     int batch_idx = batch_seq_idx / L;
     int seq_idx = batch_seq_idx % L;
@@ -17,7 +20,7 @@ __global__ void softplus(const float* input, float* output, size_t B, size_t L, 
     int base_idx = batch_idx * L * D + seq_idx * D;
 
     if (feature_idx < D) {
-        float x = input[base_idx + feature_idx];
+        float x = __half2float(input[base_idx + feature_idx]);
         output[base_idx + feature_idx] = logf(1.0f + expf(x));
     }
 }
@@ -27,7 +30,7 @@ void kernel_launch(const ten::Tensor& a_d, const ten::Tensor& b_d, size_t B, siz
 
     dim3 threads_per_block(NUM_THREADS);
     dim3 blocks_per_grid ((D + NUM_THREADS - 1) / NUM_THREADS, B * L);
-    softplus<<<blocks_per_grid, threads_per_block>>>(a_d.data, b_d.data, B, L, D);
+    softplus<<<blocks_per_grid, threads_per_block>>>(reinterpret_cast<const half*>(a_d.data), b_d.data, B, L, D);
 }
 
 void softplus_cpu(const float* input, float* output, size_t B, size_t L, size_t D) {
@@ -35,7 +38,7 @@ void softplus_cpu(const float* input, float* output, size_t B, size_t L, size_t 
         for (size_t l = 0; l < L; ++l) {
             for (size_t d = 0; d < D; ++d) {
                 size_t idx = b * L * D + l * D + d;
-                output[idx] = std::log1p(std::exp(input[idx]));
+                output[idx] = std::log1pf(expf(input[idx]));
             }
         }
     }
@@ -51,10 +54,13 @@ int main(int argc, char* argv[]) {
 
     unsigned int baseSeed = 42;
     PinnedVector<float> a_h(B * M * N);
+    PinnedVector<__half> a_h_fp16(B * M * N);
     PinnedVector<float> b_h(B * M * N);
     PinnedVector<float> b_ref(B * M * N);
     cpu_utils::init_random_vector(a_h, B * M * N, baseSeed);
-    
+    for (size_t i = 0; i < B * M * N; ++i) {
+        a_h_fp16[i] = __float2half(a_h[i]);
+    }
     ten::Tensor a_d, b_d;
     
     {
@@ -65,7 +71,7 @@ int main(int argc, char* argv[]) {
     
     {
         TIMED_CUDA_BLOCK("💾 Mem copy (cudaMemcpyHostToDevice)");
-        CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h.data(), B * M * N * sizeof(float), cudaMemcpyHostToDevice));
+        CUDA_ERROR_CHECK(cudaMemcpy(a_d.data, a_h_fp16.data(), B * M * N * sizeof(__half), cudaMemcpyHostToDevice));
     }
 
     {
@@ -105,7 +111,7 @@ int main(int argc, char* argv[]) {
 
     // Validation: compare b_h and b_ref
     bool all_close = true;
-    float tol = 1e-4f;
+    float tol = 1e-3f;
     for (size_t i = 0; i < B * M * N; ++i) {
         float diff = std::abs(b_h[i] - b_ref[i]);
         if (diff > tol) {
