@@ -72,11 +72,10 @@ int main() {
         CUDA_ERROR_CHECK(cudaMemcpy(v_d, v_h.data(), N * sizeof(float), cudaMemcpyHostToDevice));
     }
 
-    // Launch kernel
     int threads = 256;
     int blocks = (N + threads - 1) / threads;
     {
-        TIMED_CUDA_BLOCK("🚀 adamw_update kernel execution time");
+        TIMED_CUDA_BLOCK("🚀 Kernel execution time");
         adamw_update<<<blocks, threads>>>(param_d, grad_d, m_d, v_d, lr, beta1, beta2, epsilon, weight_decay, step, N);
         CUDA_ERROR_CHECK(cudaDeviceSynchronize());
     }
